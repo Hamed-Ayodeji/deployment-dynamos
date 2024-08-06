@@ -51,7 +51,7 @@ Description=Tunnel Service for {subdomain}
 After=network.target
 
 [Service]
-User=tunnel
+User=root
 ExecStart={' '.join(ssh_command)}
 Restart=always
 StandardOutput=journal+console

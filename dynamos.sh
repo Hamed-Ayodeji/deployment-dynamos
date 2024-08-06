@@ -56,7 +56,7 @@ systemctl restart nginx && log_info "Nginx restarted."
 CLOUDFLARE_API_TOKEN_PATH="/etc/letsencrypt/cloudflare.ini"
 
 # Check if the Cloudflare API token file exists
-if [ ! -f "$CLOUFLARE_API_TOKEN_PATH" ]; then
+if [ ! -f "$CLOUDFLARE_API_TOKEN_PATH" ]; then
     log_info "Cloudflare API token file not found at $CLOUDFLARE_API_TOKEN_PATH"
     log_info "Please create the file with the following content:"
     log_info "dns_cloudflare_api_token = your_cloudflare_api_token"

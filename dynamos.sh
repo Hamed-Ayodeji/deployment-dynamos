@@ -15,8 +15,8 @@ log_info() {
 log_info "Updating package lists..."
 apt update
 
-log_info "Installing openssh-server, nginx, certbot, python3-certbot-dns-cloudflare, and whois..."
-yes | apt install -y openssh-server nginx certbot python3-certbot-dns-cloudflare whois
+log_info "Installing openssh-server, nginx, certbot, python3-certbot-dns-cloudflare, libcap2-bin, and whois..."
+yes | apt install -y openssh-server nginx certbot python3-certbot-dns-cloudflare libcap2-bin whois
 
 # Enable and start SSH service
 log_info "Enabling and starting SSH service..."
@@ -29,6 +29,10 @@ sed -i '/^#GatewayPorts no/c\GatewayPorts yes' /etc/ssh/sshd_config
 sed -i '/^#AllowTcpForwarding no/c\AllowTcpForwarding yes' /etc/ssh/sshd_config
 sed -i '/^#UsePAM yes/c\UsePAM yes' /etc/ssh/sshd_config
 systemctl restart ssh
+
+# Grant the 'tunnel' user permission to bind to port 80
+log_info "Granting the 'tunnel' user permission to bind to port 80..."
+setcap 'cap_net_bind_service=+ep' /usr/sbin/sshd
 
 # Configure Nginx for wildcard subdomains and dynamic port forwarding
 log_info "Configuring Nginx for wildcard subdomains and ports..."

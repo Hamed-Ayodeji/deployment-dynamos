@@ -34,6 +34,7 @@ def setup_reverse_forwarding(local_address, subdomain, debug):
 
     ssh_command = [
         "ssh",
+        "-i", "/root/.ssh/id_ed25519",  # Specify the path to your private key
         "-o", "StrictHostKeyChecking=accept-new",
         "-R", f"{local_port}:localhost:{local_port}",
         "tunnel@qurtnex.net.ng",
@@ -51,8 +52,8 @@ After=network.target
 User=tunnel
 ExecStart={' '.join(ssh_command)}
 Restart=always
-StandardOutput=syslog
-StandardError=syslog
+StandardOutput=journal+console
+StandardError=journal+console
 SyslogIdentifier=tunnel_{subdomain}
 
 [Install]

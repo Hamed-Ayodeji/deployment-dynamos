@@ -30,19 +30,21 @@ sed -i '/^#AllowTcpForwarding no/c\AllowTcpForwarding yes' /etc/ssh/sshd_config
 sed -i '/^#UsePAM yes/c\UsePAM yes' /etc/ssh/sshd_config
 systemctl restart ssh
 
-# Configure Nginx for wildcard subdomains
-log_info "Configuring Nginx for wildcard subdomains..."
+# Configure Nginx for wildcard subdomains and dynamic port forwarding
+log_info "Configuring Nginx for wildcard subdomains and ports..."
 tee /etc/nginx/sites-available/tunnel_service <<EOF
 server {
     listen 80;
     server_name *.qurtnex.net.ng;
 
     location / {
-        proxy_pass http://localhost:3000;
+        set \$backend "http://localhost:\$http_x_forwarded_port";
+        proxy_pass \$backend;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Port \$http_x_forwarded_port;
     }
 }
 EOF
@@ -53,6 +55,14 @@ systemctl restart nginx && log_info "Nginx restarted."
 
 # Path to Cloudflare API token file
 CLOUDFLARE_API_TOKEN_PATH="/etc/letsencrypt/cloudflare.ini"
+
+# Check if the Cloudflare API token file exists
+if [ ! -f "$CLOUDFLARE_API_TOKEN_PATH" ]; then
+    log_info "Cloudflare API token file not found at $CLOUFLARE_API_TOKEN_PATH"
+    log_info "Please create the file with the following content:"
+    log_info "dns_cloudflare_api_token = your_cloudflare_api_token"
+    exit 1
+fi
 
 # Check if the SSL certificate already exists
 CERT_PATH="/etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem"

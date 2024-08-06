@@ -26,12 +26,16 @@ def generate_subdomain(custom_subdomain=None):
 
 # Function to set up SSH reverse forwarding
 def setup_reverse_forwarding(local_address, subdomain, debug):
-    local_host, local_port = local_address.split(":")
+    if ":" in local_address:
+        local_host, local_port = local_address.split(":")
+    else:
+        local_host = local_address
+        local_port = "80"
 
     ssh_command = [
         "ssh",
         "-o", "StrictHostKeyChecking=accept-new",
-        "-R", f"80:{local_host}:{local_port}",
+        "-R", f"{local_port}:localhost:{local_port}",
         "tunnel@qurtnex.net.ng",
         "-N"
     ]
@@ -69,8 +73,12 @@ WantedBy=multi-user.target
         print(f"SSH command: {' '.join(ssh_command)}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Set up a reverse SSH tunnel and create a systemd service.")
-    parser.add_argument("local_address", help="Local address and port in the format <address>:<port>")
+    parser = argparse.ArgumentParser(
+        description="Set up a reverse SSH tunnel and create a systemd service.",
+        epilog="Example usage:\n  dynamos 127.0.0.1:3000\n  dynamos 127.0.0.1 -s customsubdomain\n  dynamos 127.0.0.1 -d",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("local_address", help="Local address and port in the format <address>:<port>. If the port is not provided, it defaults to 80.")
     parser.add_argument("-s", "--subdomain", help="Custom subdomain to use (default: randomly generated)")
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug output")
 

@@ -58,11 +58,16 @@ CLOUDFLARE_API_TOKEN_PATH="/etc/letsencrypt/cloudflare.ini"
 
 # Check if the Cloudflare API token file exists
 if [ ! -f "$CLOUDFLARE_API_TOKEN_PATH" ]; then
-    log_info "Cloudflare API token file not found at $CLOUFLARE_API_TOKEN_PATH"
+    log_info "Cloudflare API token file not found at $CLOUDFLARE_API_TOKEN_PATH"
     log_info "Please create the file with the following content:"
     log_info "dns_cloudflare_api_token = your_cloudflare_api_token"
     exit 1
 fi
+
+# Ensure the Cloudflare API token file has the correct permissions
+log_info "Ensuring correct permissions for the Cloudflare API token file..."
+chmod 600 "$CLOUDFLARE_API_TOKEN_PATH"
+chown root:root "$CLOUDFLARE_API_TOKEN_PATH"
 
 # Check if the SSL certificate already exists
 CERT_PATH="/etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem"
@@ -70,7 +75,7 @@ if [ -f "$CERT_PATH" ]; then
     log_info "SSL certificate already exists, skipping Certbot..."
 else
     log_info "Configuring SSL certificates with Certbot using DNS-01 challenge..."
-    yes | certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$CLOUDFLARE_API_TOKEN_PATH" \
+    certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$CLOUDFLARE_API_TOKEN_PATH" \
         --agree-tos --no-eff-email -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
 fi
 

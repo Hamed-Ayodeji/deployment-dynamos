@@ -25,7 +25,7 @@ ssh-copy-id -i ~/.ssh/tunnel_key.pub root@161.35.9.238
 sudo tee /etc/nginx/sites-available/tunnel_service <<EOF
 server {
     listen 80;
-    server_name ~^subdomain-[a-z0-9]{8}\.domain\.com$;
+    server_name {{ SERVER_NAME_PATTERN }};
 
     location / {
         proxy_pass http://localhost:3000;
@@ -37,10 +37,28 @@ server {
 }
 EOF
 
+# Define the variable
+SERVER_NAME_PATTERN='~^subdomain-[a-z0-9]{8}\.dynamos\.tunnelprime\.com$'
+
+# Replace placeholder in the template
+sudo sed -i "s/{{ SERVER_NAME_PATTERN }}/$SERVER_NAME_PATTERN/" /etc/nginx/sites-available/tunnel_service
+
 # Enable the Nginx configuration
+if [ -L /etc/nginx/sites-enabled/tunnel_service ]; then
+    sudo rm /etc/nginx/sites-enabled/tunnel_service
+fi
 sudo ln -s /etc/nginx/sites-available/tunnel_service /etc/nginx/sites-enabled/
+
+# Test Nginx configuration
 sudo nginx -t
-sudo systemctl restart nginx
+
+# Restart Nginx if configuration is valid
+if [ $? -eq 0 ]; then
+    sudo systemctl restart nginx
+else
+    echo "Nginx configuration test failed."
+    exit 1
+fi
 
 # Create the tunneling service script
 cat <<'EOF' > ~/tunnel_service.sh
@@ -48,7 +66,7 @@ cat <<'EOF' > ~/tunnel_service.sh
 
 # Function to generate a random subdomain
 generate_subdomain() {
-  echo "subdomain-$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8).domain.com"
+  echo "subdomain-$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8).dynamos.tunnelprime.com"
 }
 
 # Function to set up SSH reverse forwarding
@@ -56,7 +74,7 @@ setup_reverse_forwarding() {
   local local_port=$1
   local subdomain=$(generate_subdomain)
 
-  ssh -i ~/.ssh/tunnel_key -R 80:localhost:${local_port} user@domain.com -N &
+  ssh -i ~/.ssh/tunnel_key -R 80:localhost:${local_port} root@161.35.9.238 -N &
   local ssh_pid=$!
 
   echo "Tunnel established. Access your application at http://${subdomain}"
@@ -67,7 +85,7 @@ setup_reverse_forwarding() {
 }
 EOF
 
-# Make the tunneling service available
+# Make the tunneling service script executable
 chmod +x ~/tunnel_service.sh
 
-echo "Setup is complete"
+echo "Setup is complete."

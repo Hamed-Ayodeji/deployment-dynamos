@@ -51,6 +51,9 @@ After=network.target
 User=tunnel
 ExecStart={' '.join(ssh_command)}
 Restart=always
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=tunnel_{subdomain}
 
 [Install]
 WantedBy=multi-user.target

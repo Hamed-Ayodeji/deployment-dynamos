@@ -15,8 +15,8 @@ log_info() {
 log_info "Updating package lists..."
 apt update
 
-log_info "Installing openssh-server, nginx, certbot, and python3-certbot-nginx..."
-apt install -y openssh-server nginx certbot python3-certbot-nginx
+log_info "Installing openssh-server, nginx, certbot, python3-certbot-dns-cloudflare, and whois..."
+yes | apt install -y openssh-server nginx certbot python3-certbot-dns-cloudflare whois
 
 # Enable and start SSH service
 log_info "Enabling and starting SSH service..."
@@ -51,24 +51,29 @@ ln -s /etc/nginx/sites-available/tunnel_service /etc/nginx/sites-enabled/
 nginx -t && log_info "Nginx configuration test successful."
 systemctl restart nginx && log_info "Nginx restarted."
 
+# Path to Cloudflare API token file
+CLOUDFLARE_API_TOKEN_PATH="/etc/letsencrypt/cloudflare.ini"
+
 # Check if the SSL certificate already exists
 CERT_PATH="/etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem"
 if [ -f "$CERT_PATH" ]; then
     log_info "SSL certificate already exists, skipping Certbot..."
 else
-    log_info "Configuring SSL certificates with Certbot..."
-    certbot --nginx --agree-tos --redirect -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
+    log_info "Configuring SSL certificates with Certbot using DNS-01 challenge..."
+    yes | certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$CLOUDFLARE_API_TOKEN_PATH" \
+        --agree-tos --no-eff-email -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
 fi
 
 # Create a general user for tunneling
-log_info "Creating 'tunnel' user..."
-if ! id "tunnel" &>/dev/null; then
-    adduser --gecos "" tunnel
-    passwd tunnel
-    usermod -aG sudo tunnel
-    log_info "User 'tunnel' created and configured."
+USERNAME="tunnel"
+log_info "Creating user '$USERNAME' with password '$USERNAME'..."
+if ! id "$USERNAME" &>/dev/null; then
+    adduser --gecos "" "$USERNAME"
+    echo "$USERNAME:$USERNAME" | chpasswd
+    usermod -aG sudo "$USERNAME"
+    log_info "User '$USERNAME' created and configured."
 else
-    log_info "User 'tunnel' already exists."
+    log_info "User '$USERNAME' already exists."
 fi
 
 # Ensure PAM is configured for the dynamos service
@@ -84,7 +89,7 @@ EOF
 log_info "Setting up logging directory and permissions..."
 mkdir -p /var/log/tunnel_service
 chown www-data:adm /var/log/tunnel_service
-chown -R tunnel:tunnel /var/log/tunnel_service
+chown -R "$USERNAME":"$USERNAME" /var/log/tunnel_service
 chmod 750 /var/log/tunnel_service
 log_info "Logging directory and permissions set."
 

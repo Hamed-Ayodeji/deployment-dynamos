@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import subprocess
 import sys
 import random
@@ -6,8 +8,15 @@ import logging
 import argparse
 import os
 
+# Set up logging directory
+LOG_DIR = '/var/log/tunnel_service'
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR, exist_ok=True)
+    os.chmod(LOG_DIR, 0o750)
+    os.chown(LOG_DIR, -1, -1)
+
 # Set up logging
-logging.basicConfig(filename='/var/log/tunnel_service/dynamos.log', level=logging.INFO, format='%(asctime)s %(message)s')
+logging.basicConfig(filename=os.path.join(LOG_DIR, 'dynamos.log'), level=logging.INFO, format='%(asctime)s %(message)s')
 
 # Function to generate a random subdomain
 def generate_subdomain(custom_subdomain=None):

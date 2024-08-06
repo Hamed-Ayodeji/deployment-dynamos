@@ -51,9 +51,14 @@ ln -s /etc/nginx/sites-available/tunnel_service /etc/nginx/sites-enabled/
 nginx -t && log_info "Nginx configuration test successful."
 systemctl restart nginx && log_info "Nginx restarted."
 
-# Configure SSL certificates with Certbot
-log_info "Configuring SSL certificates with Certbot..."
-certbot --nginx --agree-tos --redirect -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
+# Check if the SSL certificate already exists
+CERT_PATH="/etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem"
+if [ -f "$CERT_PATH" ]; then
+    log_info "SSL certificate already exists, skipping Certbot..."
+else
+    log_info "Configuring SSL certificates with Certbot..."
+    certbot --nginx --agree-tos --redirect -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
+fi
 
 # Create a general user for tunneling
 log_info "Creating 'tunnel' user..."

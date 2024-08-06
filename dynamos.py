@@ -32,11 +32,13 @@ def setup_reverse_forwarding(local_address, subdomain, debug):
         local_host = local_address
         local_port = "80"
 
+    remote_port = "8080"  # Use a higher port to avoid permission issues
+
     ssh_command = [
         "ssh",
         "-i", "/root/.ssh/id_ed25519",  # Specify the path to your private key
         "-o", "StrictHostKeyChecking=accept-new",
-        "-R", f"{local_port}:localhost:{local_port}",
+        "-R", f"{remote_port}:localhost:{local_port}",
         "tunnel@qurtnex.net.ng",
         "-N"
     ]

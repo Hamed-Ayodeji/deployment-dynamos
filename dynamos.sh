@@ -30,10 +30,6 @@ sed -i '/^#AllowTcpForwarding no/c\AllowTcpForwarding yes' /etc/ssh/sshd_config
 sed -i '/^#UsePAM yes/c\UsePAM yes' /etc/ssh/sshd_config
 systemctl restart ssh
 
-# Grant the 'tunnel' user permission to bind to port 80
-log_info "Granting the 'tunnel' user permission to bind to port 80..."
-setcap 'cap_net_bind_service=+ep' /usr/sbin/sshd
-
 # Configure Nginx for wildcard subdomains and dynamic port forwarding
 log_info "Configuring Nginx for wildcard subdomains and ports..."
 tee /etc/nginx/sites-available/tunnel_service <<EOF
@@ -42,13 +38,12 @@ server {
     server_name *.qurtnex.net.ng;
 
     location / {
-        set \$backend "http://localhost:\$http_x_forwarded_port";
-        proxy_pass \$backend;
+        proxy_pass http://localhost:8080;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Port \$http_x_forwarded_port;
+        proxy_set_header X-Forwarded-Port \$server_port;
     }
 }
 EOF
@@ -61,7 +56,7 @@ systemctl restart nginx && log_info "Nginx restarted."
 CLOUDFLARE_API_TOKEN_PATH="/etc/letsencrypt/cloudflare.ini"
 
 # Check if the Cloudflare API token file exists
-if [ ! -f "$CLOUDFLARE_API_TOKEN_PATH" ]; then
+if [ ! -f "$CLOUFLARE_API_TOKEN_PATH" ]; then
     log_info "Cloudflare API token file not found at $CLOUDFLARE_API_TOKEN_PATH"
     log_info "Please create the file with the following content:"
     log_info "dns_cloudflare_api_token = your_cloudflare_api_token"

@@ -7,8 +7,9 @@ import string
 import logging
 import argparse
 import os
+from tabulate import tabulate
 
-# Set up logging directory
+# Set up logging directory if it does not exist
 LOG_DIR = '/var/log/tunnel_service'
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -18,7 +19,7 @@ if not os.path.exists(LOG_DIR):
 # Set up logging
 logging.basicConfig(filename=os.path.join(LOG_DIR, 'dynamos.log'), level=logging.INFO, format='%(asctime)s %(message)s')
 
-# Function to generate a random subdomain
+# Function to generate a random subdomain or use a custom one if provided
 def generate_subdomain(custom_subdomain=None):
     if custom_subdomain:
         return f"{custom_subdomain}.qurtnex.net.ng"
@@ -26,6 +27,7 @@ def generate_subdomain(custom_subdomain=None):
 
 # Function to set up SSH reverse forwarding
 def setup_reverse_forwarding(local_address, subdomain, debug):
+    # Split the local address into host and port, default to port 80 if not provided
     if ":" in local_address:
         local_host, local_port = local_address.split(":")
     else:
@@ -34,20 +36,20 @@ def setup_reverse_forwarding(local_address, subdomain, debug):
 
     remote_port = "8080"  # Use a higher port to avoid permission issues
 
+    # SSH command to establish reverse tunnel
     ssh_command = [
         "ssh",
-        "-i", "/root/.ssh/id_ed25519",  # Specify the path to your private key
         "-o", "StrictHostKeyChecking=accept-new",
         "-R", f"{remote_port}:localhost:{local_port}",
         "tunnel@qurtnex.net.ng",
         "-N"
     ]
 
-    # Create systemd service
-    service_name = f"tunnel_{subdomain}.service"
+    # Create or update the systemd service for the tunnel
+    service_name = "tunnel_service.service"
     service_content = f"""
 [Unit]
-Description=Tunnel Service for {subdomain}
+Description=Tunnel Service
 After=network.target
 
 [Service]
@@ -56,7 +58,7 @@ ExecStart={' '.join(ssh_command)}
 Restart=always
 StandardOutput=journal+console
 StandardError=journal+console
-SyslogIdentifier=tunnel_{subdomain}
+SyslogIdentifier=tunnel_service
 
 [Install]
 WantedBy=multi-user.target
@@ -69,11 +71,16 @@ WantedBy=multi-user.target
     # Enable and start the systemd service
     subprocess.run(["systemctl", "daemon-reload"])
     subprocess.run(["systemctl", "enable", service_name])
-    subprocess.run(["systemctl", "start", service_name])
+    subprocess.run(["systemctl", "restart", service_name])
 
     logging.info(f"Tunnel established for {local_address}. Access your application at http://{subdomain}")
-    print(f"Tunnel established. Access your application at http://{subdomain}")
-    print(f"Systemd service name: {service_name}")
+    # Print the details in a tabular format
+    table = [
+        ["Local Address", local_address],
+        ["Subdomain", subdomain],
+        ["Systemd Service", service_name]
+    ]
+    print(tabulate(table, headers=["Field", "Value"], tablefmt="grid"))
 
     if debug:
         print(f"SSH command: {' '.join(ssh_command)}")

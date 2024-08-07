@@ -15,8 +15,8 @@ log_info() {
 log_info "Updating package lists..."
 apt update
 
-log_info "Installing openssh-server, nginx, certbot, python3-certbot-dns-cloudflare, and whois..."
-yes | apt install -y openssh-server nginx certbot python3-certbot-dns-cloudflare whois
+log_info "Installing openssh-server, nginx, certbot, python3-certbot-nginx, and whois..."
+yes | apt install -y openssh-server nginx certbot python3-certbot-nginx whois
 
 # Enable and start SSH service
 log_info "Enabling and starting SSH service..."
@@ -28,13 +28,14 @@ log_info "Configuring SSH for gateway ports, TCP forwarding, and PAM..."
 sed -i '/^#GatewayPorts no/c\GatewayPorts yes' /etc/ssh/sshd_config
 sed -i '/^#AllowTcpForwarding yes/c\AllowTcpForwarding yes' /etc/ssh/sshd_config
 sed -i '/^#UsePAM yes/c\UsePAM yes' /etc/ssh/sshd_config
+sed -i '/^PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config
 systemctl restart ssh
 
 # Configure Nginx for wildcard subdomains and dynamic port forwarding
 log_info "Configuring Nginx for wildcard subdomains and ports..."
 tee /etc/nginx/sites-available/tunnel_service <<EOF
 server {
-    listen 80;
+    listen 80 default_server;
     server_name *.qurtnex.net.ng;
 
     location / {
@@ -43,39 +44,26 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Port \$server_port;
+    }
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
     }
 }
 EOF
 
 ln -s /etc/nginx/sites-available/tunnel_service /etc/nginx/sites-enabled/
+mkdir -p /var/www/certbot
 nginx -t && log_info "Nginx configuration test successful."
 systemctl restart nginx && log_info "Nginx restarted."
-
-# Path to Cloudflare API token file
-CLOUDFLARE_API_TOKEN_PATH="/etc/letsencrypt/cloudflare.ini"
-
-# Check if the Cloudflare API token file exists
-if [ ! -f "$CLOUDFLARE_API_TOKEN_PATH" ]; then
-    log_info "Cloudflare API token file not found at $CLOUDFLARE_API_TOKEN_PATH"
-    log_info "Please create the file with the following content:"
-    log_info "dns_cloudflare_api_token = your_cloudflare_api_token"
-    exit 1
-fi
-
-# Ensure the Cloudflare API token file has the correct permissions
-log_info "Ensuring correct permissions for the Cloudflare API token file..."
-chmod 600 "$CLOUDFLARE_API_TOKEN_PATH"
-chown root:root "$CLOUDFLARE_API_TOKEN_PATH"
 
 # Check if the SSL certificate already exists
 CERT_PATH="/etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem"
 if [ -f "$CERT_PATH" ]; then
     log_info "SSL certificate already exists, skipping Certbot..."
 else
-    log_info "Configuring SSL certificates with Certbot using DNS-01 challenge..."
-    certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$CLOUDFLARE_API_TOKEN_PATH" \
-        --agree-tos --no-eff-email -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
+    log_info "Configuring SSL certificates with Certbot using HTTP challenge..."
+    certbot certonly --webroot -w /var/www/certbot --agree-tos --no-eff-email -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
 fi
 
 # Create a general user for tunneling
@@ -90,6 +78,13 @@ else
     log_info "User '$USERNAME' already exists."
 fi
 
+# Ensure the tunnel user has the correct SSH directory and permissions
+log_info "Configuring SSH for user '$USERNAME'..."
+sudo -u "$USERNAME" mkdir -p /home/"$USERNAME"/.ssh
+sudo -u "$USERNAME" chmod 700 /home/"$USERNAME"/.ssh
+sudo -u "$USERNAME" touch /home/"$USERNAME"/.ssh/authorized_keys
+sudo -u "$USERNAME" chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
+
 # Ensure PAM is configured for the dynamos service
 log_info "Configuring PAM for the dynamos service..."
 tee /etc/pam.d/dynamos <<EOF
@@ -98,13 +93,5 @@ auth required pam_unix.so
 account required pam_unix.so
 session required pam_unix.so
 EOF
-
-# Set up logging
-log_info "Setting up logging directory and permissions..."
-mkdir -p /var/log/tunnel_service
-chown www-data:adm /var/log/tunnel_service
-chown -R "$USERNAME":"$USERNAME" /var/log/tunnel_service
-chmod 750 /var/log/tunnel_service
-log_info "Logging directory and permissions set."
 
 log_info "Nginx and SSH services configured successfully."

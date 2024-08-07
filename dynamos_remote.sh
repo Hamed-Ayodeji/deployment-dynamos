@@ -1,97 +1,105 @@
 #!/bin/bash
 
-# Ensure the script is run with root privileges
+# Ensure the script is run as root
 if [[ "$(id -u)" -ne 0 ]]; then
     sudo -E "$0" "$@"
     exit
 fi
 
-log_info() {
-    logger -t dynamos.sh "$1"
-    echo "$1"
+# Variables (adjust as needed)
+DOMAIN="qurtnex.net.ng"
+EMAIL="qurtana93@outlook.com"
+
+# Function to print messages
+print_message() {
+  echo -e "\n>>> $1\n"
 }
 
-# Update package lists and install necessary packages
-log_info "Updating package lists..."
+# Update and install required packages
+print_message "Updating package list and installing required packages..."
 apt update
+apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
-log_info "Installing openssh-server, nginx, certbot, python3-certbot-nginx, and whois..."
-yes | apt install -y openssh-server nginx certbot python3-certbot-nginx whois
+# Configure SSH for reverse forwarding
+print_message "Configuring SSH..."
+sed -i 's/#GatewayPorts no/GatewayPorts yes/' /etc/ssh/sshd_config
+sed -i 's/#PermitOpen any/PermitOpen any/' /etc/ssh/sshd_config
+systemctl restart sshd
 
-# Enable and start SSH service
-log_info "Enabling and starting SSH service..."
-systemctl enable ssh
-systemctl start ssh
-
-# Configure SSH to allow gateway ports for reverse forwarding and use PAM
-log_info "Configuring SSH for gateway ports, TCP forwarding, and PAM..."
-sed -i '/^#GatewayPorts no/c\GatewayPorts yes' /etc/ssh/sshd_config
-sed -i '/^#AllowTcpForwarding yes/c\AllowTcpForwarding yes' /etc/ssh/sshd_config
-sed -i '/^#UsePAM yes/c\UsePAM yes' /etc/ssh/sshd_config
-sed -i '/^PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config
-systemctl restart ssh
-
-# Configure Nginx for wildcard subdomains and dynamic port forwarding
-log_info "Configuring Nginx for wildcard subdomains and ports..."
-tee /etc/nginx/sites-available/tunnel_service <<EOF
+# Configure Nginx for wildcard domains
+print_message "Configuring Nginx..."
+NGINX_CONF="/etc/nginx/sites-available/reverse-proxy"
+cat > $NGINX_CONF <<EOL
 server {
-    listen 80 default_server;
-    server_name *.qurtnex.net.ng;
+    listen 80;
+    server_name *.$DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name *.$DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:\$http_x_forwarded_port;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
 }
-EOF
+EOL
 
-ln -s /etc/nginx/sites-available/tunnel_service /etc/nginx/sites-enabled/
-mkdir -p /var/www/certbot
-nginx -t && log_info "Nginx configuration test successful."
-systemctl restart nginx && log_info "Nginx restarted."
+ln -s /etc/nginx/sites-available/reverse-proxy /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
 
-# Check if the SSL certificate already exists
-CERT_PATH="/etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem"
-if [ -f "$CERT_PATH" ]; then
-    log_info "SSL certificate already exists, skipping Certbot..."
-else
-    log_info "Configuring SSL certificates with Certbot using HTTP challenge..."
-    certbot certonly --webroot -w /var/www/certbot --agree-tos --no-eff-email -m admin@qurtnex.net.ng -d "*.qurtnex.net.ng" && log_info "SSL certificates configured successfully."
-fi
+# Obtain wildcard SSL certificate with Certbot
+print_message "Obtaining SSL certificate with Certbot..."
+print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
+certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
 
-# Create a general user for tunneling
-USERNAME="tunnel"
-log_info "Creating user '$USERNAME' with password '$USERNAME'..."
-if ! id "$USERNAME" &>/dev/null; then
-    adduser --gecos "" "$USERNAME"
-    echo "$USERNAME:$USERNAME" | chpasswd
-    usermod -aG sudo "$USERNAME"
-    log_info "User '$USERNAME' created and configured."
-else
-    log_info "User '$USERNAME' already exists."
-fi
+print_message "Follow the Certbot instructions to add the DNS TXT record."
+print_message "After adding the record and it has propagated, press Enter to continue."
 
-# Ensure the tunnel user has the correct SSH directory and permissions
-log_info "Configuring SSH for user '$USERNAME'..."
-sudo -u "$USERNAME" mkdir -p /home/"$USERNAME"/.ssh
-sudo -u "$USERNAME" chmod 700 /home/"$USERNAME"/.ssh
-sudo -u "$USERNAME" touch /home/"$USERNAME"/.ssh/authorized_keys
-sudo -u "$USERNAME" chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
+# Create the subdomain assignment script
+print_message "Creating subdomain assignment script..."
+SUBDOMAIN_SCRIPT="/usr/local/bin/assign_subdomain.sh"
+cat > $SUBDOMAIN_SCRIPT <<'EOL'
+#!/bin/bash
 
-# Ensure PAM is configured for the dynamos service
-log_info "Configuring PAM for the dynamos service..."
-tee /etc/pam.d/dynamos <<EOF
-#%PAM-1.0
-auth required pam_unix.so
-account required pam_unix.so
-session required pam_unix.so
-EOF
+# Generate a unique subdomain
+SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
+PORT=$1
+USER=$2
 
-log_info "Nginx and SSH services configured successfully."
+# Log the subdomain and port mapping (for debugging purposes)
+echo "$SUBDOMAIN: localhost:$PORT" >> /var/log/subdomains.log
+
+# Output the subdomain to the user
+echo "Your application is available at https://$SUBDOMAIN.yourdomain.com"
+EOL
+
+chmod +x /usr/local/bin/assign_subdomain.sh
+
+# Create systemd service for subdomain assignment
+print_message "Creating systemd service for subdomain assignment..."
+SYSTEMD_SERVICE="/etc/systemd/system/assign-subdomain.service"
+cat > $SYSTEMD_SERVICE <<EOL
+[Unit]
+Description=Assign Subdomain for SSH Reverse Forwarding
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/assign_subdomain.sh %p %u
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+systemctl enable assign-subdomain.service
+
+print_message "Setup completed successfully. Test the setup by running the following command from your local machine:"
+echo "ssh -R 80:localhost:3000 $DOMAIN"

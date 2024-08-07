@@ -32,7 +32,7 @@ print_message "Updating package list and installing required packages..."
 apt update
 apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
-# Configure SSH for reverse forwarding and passwordless root access using PAM
+# Configure SSH for reverse forwarding and passwordless root access
 print_message "Configuring SSH..."
 cat >> /etc/ssh/sshd_config <<EOL
 
@@ -52,6 +52,9 @@ cat >> /etc/pam.d/sshd <<EOL
 # Allow passwordless root login
 auth sufficient pam_permit.so
 EOL
+
+# Ensure the root password is empty
+passwd -d root
 
 systemctl restart sshd
 

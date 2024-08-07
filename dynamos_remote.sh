@@ -6,13 +6,25 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit
 fi
 
-# Variables (adjust as needed)
+# Variables
 DOMAIN="qurtnex.net.ng"
 EMAIL="qurtana93@outlook.com"
+CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 
 # Function to print messages
 print_message() {
   echo -e "\n>>> $1\n"
+}
+
+# Function to check if the SSL certificate is valid
+is_cert_valid() {
+  if [ -d "$CERT_DIR" ]; then
+    CERT_FILE="$CERT_DIR/fullchain.pem"
+    if openssl x509 -checkend 86400 -noout -in "$CERT_FILE" > /dev/null; then
+      return 0
+    fi
+  fi
+  return 1
 }
 
 # Update and install required packages
@@ -20,10 +32,27 @@ print_message "Updating package list and installing required packages..."
 apt update
 apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
-# Configure SSH for reverse forwarding
+# Configure SSH for reverse forwarding and passwordless root access using PAM
 print_message "Configuring SSH..."
-sed -i 's/#GatewayPorts no/GatewayPorts yes/' /etc/ssh/sshd_config
-sed -i 's/#PermitOpen any/PermitOpen any/' /etc/ssh/sshd_config
+cat >> /etc/ssh/sshd_config <<EOL
+
+# Custom settings for passwordless root access
+PermitRootLogin yes
+PermitEmptyPasswords yes
+PasswordAuthentication no
+PubkeyAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+EOL
+
+# Configure PAM for SSH to allow passwordless root login
+print_message "Configuring PAM for SSH..."
+cat >> /etc/pam.d/sshd <<EOL
+
+# Allow passwordless root login
+auth sufficient pam_permit.so
+EOL
+
 systemctl restart sshd
 
 # Configure Nginx for wildcard domains
@@ -56,13 +85,17 @@ EOL
 ln -s /etc/nginx/sites-available/reverse-proxy /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 
-# Obtain wildcard SSL certificate with Certbot
-print_message "Obtaining SSL certificate with Certbot..."
-print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
-certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
-
-print_message "Follow the Certbot instructions to add the DNS TXT record."
-print_message "After adding the record and it has propagated, press Enter to continue."
+# Check if SSL certificate exists and is valid
+if is_cert_valid; then
+  print_message "SSL certificate already exists and is valid."
+else
+  # Obtain wildcard SSL certificate with Certbot
+  print_message "Obtaining SSL certificate with Certbot..."
+  print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
+  certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
+  print_message "Follow the Certbot instructions to add the DNS TXT record."
+  print_message "After adding the record and it has propagated, press Enter to continue."
+fi
 
 # Create the subdomain assignment script
 print_message "Creating subdomain assignment script..."
@@ -102,4 +135,4 @@ EOL
 systemctl enable assign-subdomain.service
 
 print_message "Setup completed successfully. Test the setup by running the following command from your local machine:"
-echo "ssh -R 80:localhost:3000 $DOMAIN"
+echo "ssh -R 80:localhost:80 $DOMAIN"

@@ -34,16 +34,12 @@ apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
 # Configure SSH for reverse forwarding and passwordless root access
 print_message "Configuring SSH..."
-cat >> /etc/ssh/sshd_config <<EOL
-
-# Custom settings for passwordless root access
-PermitRootLogin yes
-PermitEmptyPasswords yes
-PasswordAuthentication no
-PubkeyAuthentication no
-ChallengeResponseAuthentication no
-UsePAM yes
-EOL
+sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#ChallengeResponseAuthentication yes/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#UsePAM yes/UsePAM yes/' /etc/ssh/sshd_config
 
 # Configure PAM for SSH to allow passwordless root login
 print_message "Configuring PAM for SSH..."

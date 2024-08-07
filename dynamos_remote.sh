@@ -10,6 +10,7 @@ fi
 DOMAIN="qurtnex.net.ng"
 EMAIL="qurtana93@outlook.com"
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+TUNNEL_USER="tunnel"
 
 # Function to print messages
 print_message() {
@@ -27,30 +28,44 @@ is_cert_valid() {
   return 1
 }
 
+# Ensure the sudo group exists and has elevated privileges
+print_message "Ensuring the sudo group exists and has elevated privileges..."
+if ! getent group sudo > /dev/null; then
+    groupadd sudo
+fi
+
+if ! grep -q "^%sudo" /etc/sudoers; then
+    echo "%sudo   ALL=(ALL:ALL) ALL" >> /etc/sudoers
+fi
+
+# Create the tunnel user without a password
+print_message "Creating the tunnel user without a password..."
+adduser --disabled-password --gecos "" $TUNNEL_USER
+usermod -aG sudo $TUNNEL_USER
+
 # Update and install required packages
 print_message "Updating package list and installing required packages..."
 apt update
 apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
-# Configure SSH for reverse forwarding and passwordless root access
+# Configure SSH for reverse forwarding and passwordless tunnel user access
 print_message "Configuring SSH..."
-sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
-sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication no/' /etc/ssh/sshd_config
-sed -i 's/#ChallengeResponseAuthentication yes/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
-sed -i 's/#UsePAM yes/UsePAM yes/' /etc/ssh/sshd_config
+sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+sed -i 's/#PermitEmptyPasswords.*/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
 
-# Configure PAM for SSH to allow passwordless root login
+# Configure PAM for SSH to allow passwordless tunnel user login
 print_message "Configuring PAM for SSH..."
-cat >> /etc/pam.d/sshd <<EOL
+if ! grep -q "auth sufficient pam_permit.so" /etc/pam.d/sshd; then
+    echo "auth sufficient pam_permit.so" >> /etc/pam.d/sshd
+fi
 
-# Allow passwordless root login
-auth sufficient pam_permit.so
-EOL
-
-# Ensure the root password is empty
-passwd -d root
+# Ensure the tunnel user has no password
+print_message "Ensuring tunnel user has no password..."
+passwd -d $TUNNEL_USER
 
 systemctl restart sshd
 
@@ -134,4 +149,4 @@ EOL
 systemctl enable assign-subdomain.service
 
 print_message "Setup completed successfully. Test the setup by running the following command from your local machine:"
-echo "ssh -R 80:localhost:80 $DOMAIN"
+echo "ssh -R 80:localhost:80 tunnel@$DOMAIN"

@@ -53,7 +53,7 @@ apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 print_message "Configuring SSH..."
 sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/#PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
-sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/#ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/#UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
@@ -64,7 +64,7 @@ cat >> /etc/ssh/sshd_config <<EOL
 # Allow passwordless login for tunnel user
 Match User tunnel
     PermitEmptyPasswords yes
-    PasswordAuthentication no
+    PasswordAuthentication yes
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
 EOL

@@ -50,7 +50,7 @@ fi
 
 # Update and install required packages
 print_message "Updating package list and installing required packages..."
-apt update && apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
+apt update && apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime iptables-persistent
 
 # Configure SSH for reverse forwarding and passwordless tunnel user access
 print_message "Configuring SSH..."
@@ -128,16 +128,18 @@ SUBDOMAIN_SCRIPT="/usr/local/bin/assign_subdomain.sh"
 cat > $SUBDOMAIN_SCRIPT <<'EOL'
 #!/bin/bash
 
+# Variables
+DOMAIN="qurtnex.net.ng"
+
 # Generate a unique subdomain
 SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
 PORT=$1
-USER=$2
 
 # Log the subdomain and port mapping (for debugging purposes)
 echo "$SUBDOMAIN: localhost:$PORT" >> /var/log/subdomains.log
 
 # Output the subdomain to the user
-echo "Your application is available at https://$SUBDOMAIN.yourdomain.com"
+echo "Your application is available at https://$SUBDOMAIN.$DOMAIN"
 EOL
 
 chmod +x /usr/local/bin/assign_subdomain.sh
@@ -151,7 +153,7 @@ Description=Assign Subdomain for SSH Reverse Forwarding
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/assign_subdomain.sh %p %u
+ExecStart=/usr/local/bin/assign_subdomain.sh %p
 
 [Install]
 WantedBy=multi-user.target
@@ -160,4 +162,4 @@ EOL
 systemctl enable assign-subdomain.service
 
 print_message "Setup completed successfully. Test the setup by running the following command from your local machine:"
-echo "ssh -R 80:localhost:80 tunnel@$DOMAIN"
+echo "ssh -R <local_port>:localhost:<local_port> tunnel@$DOMAIN"

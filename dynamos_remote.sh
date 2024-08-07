@@ -42,6 +42,7 @@ fi
 print_message "Creating the tunnel user without a password..."
 adduser --disabled-password --gecos "" $TUNNEL_USER
 usermod -aG sudo $TUNNEL_USER
+passwd -d $TUNNEL_USER
 
 # Update and install required packages
 print_message "Updating package list and installing required packages..."
@@ -52,7 +53,7 @@ apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 print_message "Configuring SSH..."
 sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/#PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
-sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/#ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/#UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
@@ -73,10 +74,6 @@ print_message "Configuring PAM for SSH..."
 if ! grep -q "auth sufficient pam_permit.so" /etc/pam.d/sshd; then
     echo "auth sufficient pam_permit.so" >> /etc/pam.d/sshd
 fi
-
-# Ensure the tunnel user has no password
-print_message "Ensuring tunnel user has no password..."
-passwd -d $TUNNEL_USER
 
 systemctl restart sshd
 

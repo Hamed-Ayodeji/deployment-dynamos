@@ -32,6 +32,10 @@ def generate_ssh_key():
         subprocess.run(["ssh-keygen", "-t", "ed25519", "-f", key_file, "-q", "-N", ""])
     return key_file
 
+# Function to remove old host key if it exists
+def remove_old_host_key(remote_host):
+    subprocess.run(["ssh-keygen", "-R", remote_host])
+
 # Function to check if SSH key is already on remote server
 def is_key_copied(remote_user, remote_host):
     result = subprocess.run(
@@ -51,6 +55,7 @@ def copy_ssh_key(remote_user, remote_host, retries=5, delay=5):
                 return True
             else:
                 logging.warning(f"Attempt {attempt + 1} to copy SSH key failed. Retrying in {delay} seconds...")
+                remove_old_host_key(remote_host)
                 time.sleep(delay)
         else:
             logging.info("SSH key already exists on the remote server.")

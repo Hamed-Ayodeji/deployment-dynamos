@@ -49,13 +49,17 @@ def copy_ssh_key(remote_user, remote_host, retries=5, delay=5):
     key_file = os.path.expanduser("~/.ssh/id_ed25519.pub")
     for attempt in range(retries):
         if not is_key_copied(remote_user, remote_host):
-            result = subprocess.run(["ssh-copy-id", "-i", key_file, f"{remote_user}@{remote_host}"])
+            # Force key acceptance
+            remove_old_host_key(remote_host)
+            result = subprocess.run(
+                ["ssh-copy-id", "-f", "-i", key_file, f"{remote_user}@{remote_host}"],
+                input="yes\n".encode(), stderr=subprocess.PIPE, stdout=subprocess.PIPE
+            )
             if result.returncode == 0:
                 logging.info("SSH key copied successfully.")
                 return True
             else:
                 logging.warning(f"Attempt {attempt + 1} to copy SSH key failed. Retrying in {delay} seconds...")
-                remove_old_host_key(remote_host)
                 time.sleep(delay)
         else:
             logging.info("SSH key already exists on the remote server.")

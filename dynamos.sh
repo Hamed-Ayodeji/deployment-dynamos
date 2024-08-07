@@ -6,7 +6,6 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit
 fi
 
-# Function to log information
 log_info() {
     logger -t dynamos.sh "$1"
     echo "$1"
@@ -91,6 +90,13 @@ if ! id "$USERNAME" &>/dev/null; then
 else
     log_info "User '$USERNAME' already exists."
 fi
+
+# Ensure the tunnel user has the correct SSH directory and permissions
+log_info "Configuring SSH for user '$USERNAME'..."
+sudo -u "$USERNAME" mkdir -p /home/"$USERNAME"/.ssh
+sudo -u "$USERNAME" chmod 700 /home/"$USERNAME"/.ssh
+sudo -u "$USERNAME" touch /home/"$USERNAME"/.ssh/authorized_keys
+sudo -u "$USERNAME" chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
 
 # Ensure PAM is configured for the dynamos service
 log_info "Configuring PAM for the dynamos service..."

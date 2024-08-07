@@ -40,14 +40,17 @@ fi
 
 # Create the tunnel user without a password
 print_message "Creating the tunnel user without a password..."
-adduser --disabled-password --gecos "" $TUNNEL_USER
-usermod -aG sudo $TUNNEL_USER
-passwd -d $TUNNEL_USER
+if ! id -u $TUNNEL_USER > /dev/null 2>&1; then
+    adduser --disabled-password --gecos "" $TUNNEL_USER
+    usermod -aG sudo $TUNNEL_USER
+    passwd -d $TUNNEL_USER
+else
+    print_message "User $TUNNEL_USER already exists."
+fi
 
 # Update and install required packages
 print_message "Updating package list and installing required packages..."
-apt update
-apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
+apt update && apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
 # Configure SSH for reverse forwarding and passwordless tunnel user access
 print_message "Configuring SSH..."
@@ -62,7 +65,7 @@ sed -i 's/#UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
 cat >> /etc/ssh/sshd_config <<EOL
 
 # Allow passwordless login for tunnel user
-Match User tunnel
+Match User $TUNNEL_USER
     PermitEmptyPasswords yes
     PasswordAuthentication yes
     PubkeyAuthentication no

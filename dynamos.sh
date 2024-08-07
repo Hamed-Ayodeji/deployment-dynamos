@@ -28,7 +28,6 @@ log_info "Configuring SSH for gateway ports, TCP forwarding, and PAM..."
 sed -i '/^#GatewayPorts no/c\GatewayPorts yes' /etc/ssh/sshd_config
 sed -i '/^#AllowTcpForwarding yes/c\AllowTcpForwarding yes' /etc/ssh/sshd_config
 sed -i '/^#UsePAM yes/c\UsePAM yes' /etc/ssh/sshd_config
-sed -i '/^PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config
 systemctl restart ssh
 
 # Configure Nginx for wildcard subdomains and dynamic port forwarding
@@ -90,13 +89,6 @@ if ! id "$USERNAME" &>/dev/null; then
 else
     log_info "User '$USERNAME' already exists."
 fi
-
-# Ensure the tunnel user has the correct SSH directory and permissions
-log_info "Configuring SSH for user '$USERNAME'..."
-sudo -u "$USERNAME" mkdir -p /home/"$USERNAME"/.ssh
-sudo -u "$USERNAME" chmod 700 /home/"$USERNAME"/.ssh
-sudo -u "$USERNAME" touch /home/"$USERNAME"/.ssh/authorized_keys
-sudo -u "$USERNAME" chmod 600 /home/"$USERNAME"/.ssh/authorized_keys
 
 # Ensure PAM is configured for the dynamos service
 log_info "Configuring PAM for the dynamos service..."

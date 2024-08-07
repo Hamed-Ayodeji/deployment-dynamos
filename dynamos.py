@@ -7,69 +7,25 @@ import string
 import logging
 import argparse
 import os
-from tabulate import tabulate
-import time
 
-# Set up logging directory if it does not exist
+# Set up logging directory
 LOG_DIR = '/var/log/tunnel_service'
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR, exist_ok=True)
     os.chmod(LOG_DIR, 0o750)
+    os.chown(LOG_DIR, -1, -1)
 
 # Set up logging
 logging.basicConfig(filename=os.path.join(LOG_DIR, 'dynamos.log'), level=logging.INFO, format='%(asctime)s %(message)s')
 
-# Function to generate a random subdomain or use a custom one if provided
+# Function to generate a random subdomain
 def generate_subdomain(custom_subdomain=None):
     if custom_subdomain:
         return f"{custom_subdomain}.qurtnex.net.ng"
     return "subdomain-" + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8)) + ".qurtnex.net.ng"
 
-# Function to generate SSH key pair if not exists
-def generate_ssh_key():
-    key_file = os.path.expanduser("~/.ssh/id_ed25519")
-    if not os.path.exists(key_file):
-        subprocess.run(["ssh-keygen", "-t", "ed25519", "-f", key_file, "-q", "-N", ""])
-    return key_file
-
-# Function to remove old host key if it exists
-def remove_old_host_key(remote_host):
-    subprocess.run(["ssh-keygen", "-R", remote_host])
-
-# Function to check if SSH key is already on remote server
-def is_key_copied(remote_user, remote_host):
-    result = subprocess.run(
-        ["ssh", "-o", "PasswordAuthentication=no", f"{remote_user}@{remote_host}", "exit"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    return result.returncode == 0
-
-# Function to copy the SSH public key to the remote server with retries
-def copy_ssh_key(remote_user, remote_host, retries=5, delay=5):
-    key_file = os.path.expanduser("~/.ssh/id_ed25519.pub")
-    for attempt in range(retries):
-        if not is_key_copied(remote_user, remote_host):
-            # Force key acceptance
-            remove_old_host_key(remote_host)
-            result = subprocess.run(
-                ["ssh-copy-id", "-f", "-i", key_file, f"{remote_user}@{remote_host}"],
-                input="yes\n".encode(), stderr=subprocess.PIPE, stdout=subprocess.PIPE
-            )
-            if result.returncode == 0:
-                logging.info("SSH key copied successfully.")
-                return True
-            else:
-                logging.warning(f"Attempt {attempt + 1} to copy SSH key failed. Retrying in {delay} seconds...")
-                time.sleep(delay)
-        else:
-            logging.info("SSH key already exists on the remote server.")
-            return True
-    logging.error("Failed to copy SSH key after multiple attempts.")
-    return False
-
 # Function to set up SSH reverse forwarding
 def setup_reverse_forwarding(local_address, subdomain, debug):
-    # Split the local address into host and port, default to port 80 if not provided
     if ":" in local_address:
         local_host, local_port = local_address.split(":")
     else:
@@ -78,29 +34,20 @@ def setup_reverse_forwarding(local_address, subdomain, debug):
 
     remote_port = "8080"  # Use a higher port to avoid permission issues
 
-    # Generate SSH key pair if not exists
-    ssh_key = generate_ssh_key()
-    
-    # Copy SSH public key to the remote server with retries
-    if not copy_ssh_key("tunnel", "qurtnex.net.ng"):
-        logging.error("Failed to set up SSH key for remote access. Exiting...")
-        sys.exit(1)
-
-    # SSH command to establish reverse tunnel
     ssh_command = [
         "ssh",
+        "-i", "/root/.ssh/id_ed25519",  # Specify the path to your private key
         "-o", "StrictHostKeyChecking=accept-new",
-        "-i", ssh_key,
         "-R", f"{remote_port}:localhost:{local_port}",
         "tunnel@qurtnex.net.ng",
         "-N"
     ]
 
-    # Create or update the systemd service for the tunnel
-    service_name = "tunnel_service.service"
+    # Create systemd service
+    service_name = f"tunnel_{subdomain}.service"
     service_content = f"""
 [Unit]
-Description=Tunnel Service
+Description=Tunnel Service for {subdomain}
 After=network.target
 
 [Service]
@@ -109,7 +56,7 @@ ExecStart={' '.join(ssh_command)}
 Restart=always
 StandardOutput=journal+console
 StandardError=journal+console
-SyslogIdentifier=tunnel_service
+SyslogIdentifier=tunnel_{subdomain}
 
 [Install]
 WantedBy=multi-user.target
@@ -122,16 +69,11 @@ WantedBy=multi-user.target
     # Enable and start the systemd service
     subprocess.run(["systemctl", "daemon-reload"])
     subprocess.run(["systemctl", "enable", service_name])
-    subprocess.run(["systemctl", "restart", service_name])
+    subprocess.run(["systemctl", "start", service_name])
 
     logging.info(f"Tunnel established for {local_address}. Access your application at http://{subdomain}")
-    # Print the details in a tabular format
-    table = [
-        ["Local Address", local_address],
-        ["Subdomain", subdomain],
-        ["Systemd Service", service_name]
-    ]
-    print(tabulate(table, headers=["Field", "Value"], tablefmt="grid"))
+    print(f"Tunnel established. Access your application at http://{subdomain}")
+    print(f"Systemd service name: {service_name}")
 
     if debug:
         print(f"SSH command: {' '.join(ssh_command)}")

@@ -123,7 +123,7 @@ CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
 cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
 #!/bin/bash
 
-LOCAL_PORT=$3
+LOCAL_PORT=$1
 SUBDOMAIN=$2
 DOMAIN="qurtnex.net.ng"
 

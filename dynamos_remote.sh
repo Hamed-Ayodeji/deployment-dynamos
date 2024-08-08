@@ -14,18 +14,18 @@ TUNNEL_USER="tunnel"
 
 # Function to print messages
 print_message() {
-  echo -e "\n>>> $1\n"
+    echo -e "\n>>> $1\n"
 }
 
 # Function to check if the SSL certificate is valid
 is_cert_valid() {
-  if [ -d "$CERT_DIR" ]; then
+    if [ -d "$CERT_DIR" ]; then
     CERT_FILE="$CERT_DIR/fullchain.pem"
     if openssl x509 -checkend 86400 -noout -in "$CERT_FILE" > /dev/null; then
-      return 0
+        return 0
     fi
-  fi
-  return 1
+    fi
+    return 1
 }
 
 # Create the tunnel user without a password
@@ -59,6 +59,7 @@ Match User $TUNNEL_USER
     PasswordAuthentication yes
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
+    ForceCommand /usr/local/bin/auto_setup.sh
 EOL
 
 # Configure PAM for SSH to allow passwordless tunnel user login
@@ -107,14 +108,14 @@ nginx -t && systemctl reload nginx
 
 # Check if SSL certificate exists and is valid
 if is_cert_valid; then
-  print_message "SSL certificate already exists and is valid."
+    print_message "SSL certificate already exists and is valid."
 else
-  # Obtain wildcard SSL certificate with Certbot
-  print_message "Obtaining SSL certificate with Certbot..."
-  print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
-  certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
-  print_message "Follow the Certbot instructions to add the DNS TXT record."
-  print_message "After adding the record and it has propagated, press Enter to continue."
+    # Obtain wildcard SSL certificate with Certbot
+    print_message "Obtaining SSL certificate with Certbot..."
+    print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
+    certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
+    print_message "Follow the Certbot instructions to add the DNS TXT record."
+    print_message "After adding the record and it has propagated, press Enter to continue."
 fi
 
 # Create the configure_nginx.sh script
@@ -129,8 +130,8 @@ DOMAIN="qurtnex.net.ng"
 
 # Check if REMOTE_PORT is provided
 if [[ -z "$REMOTE_PORT" ]]; then
-  echo "Remote port not specified"
-  exit 1
+    echo "Remote port not specified"
+    exit 1
 fi
 
 # Configure Nginx for the unique subdomain
@@ -187,17 +188,23 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
 
-REMOTE_PORT=$1
-HOST=$2
-LOCAL_PORT=$3
+# Extract the SSH reverse tunnel parameters
+if [[ -z "$SSH_ORIGINAL_COMMAND" ]]; then
+    echo "No SSH_ORIGINAL_COMMAND found" | tee -a /home/tunnel/debug.log
+    exit 1
+fi
+
+REMOTE_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=-R )\d+(?=:)')
+HOST=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=:)\S+(?=:)')
+LOCAL_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=:)\d+$')
 
 echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
 echo "HOST: $HOST" | tee -a /home/tunnel/debug.log
 echo "LOCAL_PORT: $LOCAL_PORT" | tee -a /home/tunnel/debug.log
 
 if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
-  echo "Failed to parse remote port, host, or local port from the command-line arguments." | tee -a /home/tunnel/debug.log
-  exit 1
+    echo "Failed to parse remote port, host, or local port from SSH_ORIGINAL_COMMAND." | tee -a /home/tunnel/debug.log
+    exit 1
 fi
 
 # Generate a unique subdomain
@@ -235,8 +242,8 @@ EOF
 print_message "Adding auto setup script execution to the tunnel user's .bashrc..."
 BASHRC_FILE="/home/$TUNNEL_USER/.bashrc"
 if ! grep -q "/usr/local/bin/auto_setup.sh" "$BASHRC_FILE"; then
-  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.sh; fi' >> "$BASHRC_FILE"
+    echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.sh; fi' >> "$BASHRC_FILE"
 fi
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
-echo "ssh -t -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN \"/usr/local/bin/auto_setup.sh <remote_port> <host> <local_port>\""
+echo "ssh -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN"

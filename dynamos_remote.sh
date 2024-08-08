@@ -59,7 +59,7 @@ Match User $TUNNEL_USER
     PasswordAuthentication yes
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
-    ForceCommand /usr/local/bin/auto_setup.sh
+    ForceCommand /usr/local/bin/wrapper.sh
     PermitUserEnvironment yes
 EOL
 
@@ -180,6 +180,26 @@ EOF
 
 chmod +x /usr/local/bin/configure_nginx.sh
 
+# Create the wrapper.sh script
+print_message "Creating the wrapper.sh script..."
+WRAPPER_SCRIPT="/usr/local/bin/wrapper.sh"
+cat > $WRAPPER_SCRIPT <<'EOF'
+#!/bin/bash
+
+# Wrapper script to log SSH_ORIGINAL_COMMAND and call auto_setup.sh
+echo "Executing wrapper.sh" | tee -a /home/tunnel/debug.log
+
+if [[ -z "$SSH_ORIGINAL_COMMAND" ]]; then
+    echo "No SSH_ORIGINAL_COMMAND found" | tee -a /home/tunnel/debug.log
+    exit 1
+fi
+
+echo "SSH_ORIGINAL_COMMAND: $SSH_ORIGINAL_COMMAND" > /home/tunnel/original_command.log
+/usr/local/bin/auto_setup.sh
+EOF
+
+chmod +x /usr/local/bin/wrapper.sh
+
 # Create the auto_setup.sh script
 print_message "Creating the auto setup script..."
 AUTO_SETUP_SCRIPT="/usr/local/bin/auto_setup.sh"
@@ -189,11 +209,14 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
 
-# Extract the SSH original command
-if [[ -z "$SSH_ORIGINAL_COMMAND" ]]; then
-    echo "No SSH_ORIGINAL_COMMAND found" | tee -a /home/tunnel/debug.log
+# Read the original command from the log
+if [[ ! -f /home/tunnel/original_command.log ]]; then
+    echo "No original command log found" | tee -a /home/tunnel/debug.log
     exit 1
 fi
+
+SSH_ORIGINAL_COMMAND=$(cat /home/tunnel/original_command.log)
+rm /home/tunnel/original_command.log
 
 # Extract the reverse port forwarding details from SSH_ORIGINAL_COMMAND
 REMOTE_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=-R )\d+(?=:)')

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HNG Internship Program</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #72EDF2 10%, #5151E5 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #fff;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        h1 {
+            color: #FFD700;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #F0F8FF;
+            margin: 10px 0;
+        }
+        .form-container {
+            margin-top: 20px;
+        }
+        input[type="text"] {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            width: calc(100% - 22px);
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        input[type="submit"] {
+            background-color: #FFD700;
+            color: #333;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        input[type="submit"]:hover {
+            background-color: #FFA500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to the HNG Internship Program</h1>
+        <p>The HNG Internship is a remote internship designed to find and develop the most talented software developers.</p>
+        <p>Enter your user ID to request access:</p>
+        <div class="form-container">
+            <form action="http://13.58.222.123/request_access" method="post">
+                <label for="user_id">User ID:</label>
+                <input type="text" id="user_id" name="user_id" required>
+                <input type="submit" value="Submit">
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+

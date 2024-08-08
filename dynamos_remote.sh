@@ -127,11 +127,18 @@ LOCAL_PORT=$1
 SUBDOMAIN=$2
 DOMAIN="qurtnex.net.ng"
 
+# Check if LOCAL_PORT is provided
+if [[ -z "$LOCAL_PORT" ]]; then
+  echo "Local port not specified"
+  exit 1
+fi
+
 # Configure Nginx for the unique subdomain
 NGINX_CONF="/etc/nginx/sites-available/$SUBDOMAIN"
 if [ -f $NGINX_CONF ]; then
     rm $NGINX_CONF
 fi
+
 cat > $NGINX_CONF <<EOL
 server {
     listen 80;

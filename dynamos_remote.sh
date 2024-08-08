@@ -180,44 +180,39 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
 
-# Extract the remote port, host, and local port from the SSH_ORIGINAL_COMMAND
-if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then
-  REMOTE_PORT=$(echo $SSH_ORIGINAL_COMMAND | sed -n 's/.*-R \([0-9]*\):.*/\1/p')
-  HOST=$(echo $SSH_ORIGINAL_COMMAND | sed -n 's/.*-R [0-9]*:\([^:]*\):.*/\1/p')
-  LOCAL_PORT=$(echo $SSH_ORIGINAL_COMMAND | sed -n 's/.*-R [0-9]*:[^:]*:\([0-9]*\).*/\1/p')
+REMOTE_PORT=$1
+HOST=$2
+LOCAL_PORT=$3
 
-  echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
-  echo "HOST: $HOST" | tee -a /home/tunnel/debug.log
-  echo "LOCAL_PORT: $LOCAL_PORT" | tee -a /home/tunnel/debug.log
+echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
+echo "HOST: $HOST" | tee -a /home/tunnel/debug.log
+echo "LOCAL_PORT: $LOCAL_PORT" | tee -a /home/tunnel/debug.log
 
-  if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
-    echo "Failed to parse remote port, host, or local port from the SSH command." | tee -a /home/tunnel/debug.log
-    exit 1
-  fi
-
-  # Generate a unique subdomain
-  SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
-
-  # Configure forwarding from the remote port to the local port and set up Nginx
-  echo "Configuring port forwarding from $REMOTE_PORT to $LOCAL_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
-  sudo /usr/local/bin/configure_nginx.sh $LOCAL_PORT $SUBDOMAIN
-
-  LOCAL_URL="http://$HOST:$LOCAL_PORT"
-  PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"
-
-  # Display the URLs in a tabular format
-  printf "\n%-20s %-40s\n" "Local URL" "Public URL" | tee -a /home/tunnel/debug.log
-  printf "%-20s %-40s\n" "---------" "----------" | tee -a /home/tunnel/debug.log
-  printf "%-20s %-40s\n" "$LOCAL_URL" "$PUBLIC_URL" | tee -a /home/tunnel/debug.log
-
-  echo "Setup completed successfully." | tee -a /home/tunnel/debug.log
-
-  # Keep the session open for debugging
-  echo "Press [CTRL+C] to exit" | tee -a /home/tunnel/debug.log
-  tail -f /dev/null
-else
-  echo "This script should be run automatically on SSH login." | tee -a /home/tunnel/debug.log
+if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
+  echo "Failed to parse remote port, host, or local port from the command-line arguments." | tee -a /home/tunnel/debug.log
+  exit 1
 fi
+
+# Generate a unique subdomain
+SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
+
+# Configure forwarding from the remote port to the local port and set up Nginx
+echo "Configuring port forwarding from $REMOTE_PORT to $LOCAL_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
+sudo /usr/local/bin/configure_nginx.sh $LOCAL_PORT $SUBDOMAIN
+
+LOCAL_URL="http://$HOST:$LOCAL_PORT"
+PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"
+
+# Display the URLs in a tabular format
+printf "\n%-20s %-40s\n" "Local URL" "Public URL" | tee -a /home/tunnel/debug.log
+printf "%-20s %-40s\n" "---------" "----------" | tee -a /home/tunnel/debug.log
+printf "%-20s %-40s\n" "$LOCAL_URL" "$PUBLIC_URL" | tee -a /home/tunnel/debug.log
+
+echo "Setup completed successfully." | tee -a /home/tunnel/debug.log
+
+# Keep the session open for debugging
+echo "Press [CTRL+C] to exit" | tee -a /home/tunnel/debug.log
+tail -f /dev/null
 EOF
 
 chmod +x /usr/local/bin/auto_setup.sh
@@ -237,4 +232,4 @@ if ! grep -q "/usr/local/bin/auto_setup.sh" "$BASHRC_FILE"; then
 fi
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
-echo "ssh -t -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN"
+echo "ssh -t -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN \"/usr/local/bin/auto_setup.sh <remote_port> <host> <local_port>\""

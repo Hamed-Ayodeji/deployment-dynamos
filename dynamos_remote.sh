@@ -120,7 +120,7 @@ fi
 # Create the configure_nginx.sh script
 print_message "Creating the configure_nginx.sh script..."
 CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
-cat > $CONFIGURE_NGINX_SCRIPT <<'EOL'
+cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
 #!/bin/bash
 
 LOCAL_PORT=$1
@@ -161,14 +161,14 @@ if [ -L /etc/nginx/sites-enabled/$SUBDOMAIN ]; then
 fi
 ln -s /etc/nginx/sites-available/$SUBDOMAIN /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
-EOL
+EOF
 
 chmod +x /usr/local/bin/configure_nginx.sh
 
 # Create the auto_setup.sh script
 print_message "Creating the auto setup script..."
 AUTO_SETUP_SCRIPT="/usr/local/bin/auto_setup.sh"
-cat > $AUTO_SETUP_SCRIPT <<'EOL'
+cat > $AUTO_SETUP_SCRIPT <<'EOF'
 #!/bin/bash
 
 # Extract the remote port, host, and local port from the SSH_ORIGINAL_COMMAND
@@ -201,16 +201,16 @@ if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then
 else
   echo "This script should be run automatically on SSH login."
 fi
-EOL
+EOF
 
 chmod +x /usr/local/bin/auto_setup.sh
 
 # Create a sudoers file for the tunnel user
 print_message "Creating sudoers file for tunnel user..."
 SUDOERS_FILE="/etc/sudoers.d/tunnel"
-cat > $SUDOERS_FILE <<EOL
+cat > $SUDOERS_FILE <<EOF
 tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
-EOL
+EOF
 
 # Add the auto_setup.sh script execution to the tunnel user's .bashrc
 print_message "Adding auto setup script execution to the tunnel user's .bashrc..."

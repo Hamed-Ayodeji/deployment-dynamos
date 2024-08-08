@@ -218,11 +218,11 @@ cat > $SUDOERS_FILE <<EOF
 tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/auto_setup.py
 EOF
 
-# Add the auto_setup.py script execution to the tunnel user's .bashrc
-print_message "Adding auto setup script execution to the tunnel user's .bashrc..."
-BASHRC_FILE="/home/$TUNNEL_USER/.bashrc"
-if ! grep -q "/usr/local/bin/auto_setup.py" "$BASHRC_FILE"; then
-  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.py; fi' >> "$BASHRC_FILE"
+# Add the auto_setup.py script execution to the tunnel user's .profile
+print_message "Adding auto setup script execution to the tunnel user's .profile..."
+PROFILE_FILE="/home/$TUNNEL_USER/.profile"
+if ! grep -q "/usr/local/bin/auto_setup.py" "$PROFILE_FILE"; then
+  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.py; fi' >> "$PROFILE_FILE"
 fi
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"

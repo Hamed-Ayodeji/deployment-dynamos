@@ -14,18 +14,18 @@ TUNNEL_USER="tunnel"
 
 # Function to print messages
 print_message() {
-    echo -e "\n>>> $1\n"
+  echo -e "\n>>> $1\n"
 }
 
 # Function to check if the SSL certificate is valid
 is_cert_valid() {
-    if [ -d "$CERT_DIR" ]; then
+  if [ -d "$CERT_DIR" ]; then
     CERT_FILE="$CERT_DIR/fullchain.pem"
     if openssl x509 -checkend 86400 -noout -in "$CERT_FILE" > /dev/null; then
-        return 0
+      return 0
     fi
-    fi
-    return 1
+  fi
+  return 1
 }
 
 # Create the tunnel user without a password
@@ -59,8 +59,7 @@ Match User $TUNNEL_USER
     PasswordAuthentication yes
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
-    ForceCommand /usr/local/bin/wrapper.sh
-    PermitUserEnvironment yes
+    ForceCommand /usr/local/bin/check_reverse_tunnel.sh
 EOL
 
 # Configure PAM for SSH to allow passwordless tunnel user login
@@ -69,7 +68,7 @@ if ! grep -q "auth sufficient pam_permit.so" /etc/pam.d/sshd; then
     echo "auth sufficient pam_permit.so" >> /etc/pam.d/sshd
 fi
 
-systemctl restart sshd
+systemctl restart ssh
 
 # Configure Nginx for wildcard domains
 print_message "Configuring Nginx..."
@@ -109,14 +108,14 @@ nginx -t && systemctl reload nginx
 
 # Check if SSL certificate exists and is valid
 if is_cert_valid; then
-    print_message "SSL certificate already exists and is valid."
+  print_message "SSL certificate already exists and is valid."
 else
-    # Obtain wildcard SSL certificate with Certbot
-    print_message "Obtaining SSL certificate with Certbot..."
-    print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
-    certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
-    print_message "Follow the Certbot instructions to add the DNS TXT record."
-    print_message "After adding the record and it has propagated, press Enter to continue."
+  # Obtain wildcard SSL certificate with Certbot
+  print_message "Obtaining SSL certificate with Certbot..."
+  print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
+  certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
+  print_message "Follow the Certbot instructions to add the DNS TXT record."
+  print_message "After adding the record and it has propagated, press Enter to continue."
 fi
 
 # Create the configure_nginx.sh script
@@ -131,8 +130,8 @@ DOMAIN="qurtnex.net.ng"
 
 # Check if REMOTE_PORT is provided
 if [[ -z "$REMOTE_PORT" ]]; then
-    echo "Remote port not specified"
-    exit 1
+  echo "Remote port not specified"
+  exit 1
 fi
 
 # Configure Nginx for the unique subdomain
@@ -180,26 +179,6 @@ EOF
 
 chmod +x /usr/local/bin/configure_nginx.sh
 
-# Create the wrapper.sh script
-print_message "Creating the wrapper.sh script..."
-WRAPPER_SCRIPT="/usr/local/bin/wrapper.sh"
-cat > $WRAPPER_SCRIPT <<'EOF'
-#!/bin/bash
-
-# Wrapper script to log SSH_ORIGINAL_COMMAND and call auto_setup.sh
-echo "Executing wrapper.sh" | tee -a /home/tunnel/debug.log
-
-if [[ -z "$SSH_ORIGINAL_COMMAND" ]]; then
-    echo "No SSH_ORIGINAL_COMMAND found" | tee -a /home/tunnel/debug.log
-    exit 1
-fi
-
-echo "SSH_ORIGINAL_COMMAND: $SSH_ORIGINAL_COMMAND" > /home/tunnel/original_command.log
-/usr/local/bin/auto_setup.sh
-EOF
-
-chmod +x /usr/local/bin/wrapper.sh
-
 # Create the auto_setup.sh script
 print_message "Creating the auto setup script..."
 AUTO_SETUP_SCRIPT="/usr/local/bin/auto_setup.sh"
@@ -209,27 +188,17 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
 
-# Read the original command from the log
-if [[ ! -f /home/tunnel/original_command.log ]]; then
-    echo "No original command log found" | tee -a /home/tunnel/debug.log
-    exit 1
-fi
-
-SSH_ORIGINAL_COMMAND=$(cat /home/tunnel/original_command.log)
-rm /home/tunnel/original_command.log
-
-# Extract the reverse port forwarding details from SSH_ORIGINAL_COMMAND
-REMOTE_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=-R )\d+(?=:)')
-HOST=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=:)\S+(?=:)')
-LOCAL_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=:)\d+$')
+REMOTE_PORT=$1
+HOST=$2
+LOCAL_PORT=$3
 
 echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
 echo "HOST: $HOST" | tee -a /home/tunnel/debug.log
 echo "LOCAL_PORT: $LOCAL_PORT" | tee -a /home/tunnel/debug.log
 
 if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
-    echo "Failed to parse remote port, host, or local port from SSH_ORIGINAL_COMMAND." | tee -a /home/tunnel/debug.log
-    exit 1
+  echo "Failed to parse remote port, host, or local port from the command-line arguments." | tee -a /home/tunnel/debug.log
+  exit 1
 fi
 
 # Generate a unique subdomain
@@ -256,6 +225,31 @@ EOF
 
 chmod +x /usr/local/bin/auto_setup.sh
 
+# Create the check_reverse_tunnel.sh script
+print_message "Creating the check_reverse_tunnel.sh script..."
+CHECK_REVERSE_TUNNEL_SCRIPT="/usr/local/bin/check_reverse_tunnel.sh"
+cat > $CHECK_REVERSE_TUNNEL_SCRIPT <<'EOF'
+#!/bin/bash
+
+# Log the SSH_ORIGINAL_COMMAND for debugging
+echo "SSH_ORIGINAL_COMMAND: $SSH_ORIGINAL_COMMAND" >> /home/tunnel/debug.log
+
+# Check if the SSH_ORIGINAL_COMMAND contains a reverse tunnel request (-R)
+if [[ "$SSH_ORIGINAL_COMMAND" =~ -R[[:space:]]([0-9]+):([^:]+):([0-9]+) ]]; then
+  REMOTE_PORT="${BASH_REMATCH[1]}"
+  HOST="${BASH_REMATCH[2]}"
+  LOCAL_PORT="${BASH_REMATCH[3]}"
+
+  echo "Detected reverse tunnel request. Executing auto_setup.sh with REMOTE_PORT=$REMOTE_PORT, HOST=$HOST, LOCAL_PORT=$LOCAL_PORT" >> /home/tunnel/debug.log
+  exec /usr/local/bin/auto_setup.sh "$REMOTE_PORT" "$HOST" "$LOCAL_PORT"
+else
+  echo "No reverse tunnel detected. Regular SSH session." >> /home/tunnel/debug.log
+  exec "$SHELL"
+fi
+EOF
+
+chmod +x /usr/local/bin/check_reverse_tunnel.sh
+
 # Create a sudoers file for the tunnel user
 print_message "Creating sudoers file for tunnel user..."
 SUDOERS_FILE="/etc/sudoers.d/tunnel"
@@ -263,12 +257,5 @@ cat > $SUDOERS_FILE <<EOF
 tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
 EOF
 
-# Add the auto_setup.sh script execution to the tunnel user's .bashrc
-print_message "Adding auto setup script execution to the tunnel user's .bashrc..."
-BASHRC_FILE="/home/$TUNNEL_USER/.bashrc"
-if ! grep -q "/usr/local/bin/auto_setup.sh" "$BASHRC_FILE"; then
-    echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.sh; fi' >> "$BASHRC_FILE"
-fi
-
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
-echo "ssh -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN"
+echo "ssh -R 8080:localhost:80 tunnel@$DOMAIN"

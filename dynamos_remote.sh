@@ -218,11 +218,12 @@ cat > $SUDOERS_FILE <<EOF
 tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/auto_setup.py
 EOF
 
-# Add the auto_setup.py script execution to the tunnel user's .profile
-print_message "Adding auto setup script execution to the tunnel user's .profile..."
-PROFILE_FILE="/home/$TUNNEL_USER/.profile"
-if ! grep -q "/usr/local/bin/auto_setup.py" "$PROFILE_FILE"; then
-  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.py; fi' >> "$PROFILE_FILE"
+# Add or modify an entry in the authorized_keys file to include the command
+AUTHORIZED_KEYS_FILE="/home/$TUNNEL_USER/.ssh/authorized_keys"
+SSH_PUBLIC_KEY="<your-ssh-public-key>"  # Replace this with your actual SSH public key
+
+if ! grep -q "command=\"/usr/local/bin/auto_setup.py\"" "$AUTHORIZED_KEYS_FILE"; then
+  echo "command=\"/usr/local/bin/auto_setup.py\",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty $SSH_PUBLIC_KEY" >> "$AUTHORIZED_KEYS_FILE"
 fi
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"

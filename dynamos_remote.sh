@@ -117,126 +117,113 @@ else
   print_message "After adding the record and it has propagated, press Enter to continue."
 fi
 
-# Create the configure_nginx.sh script
-print_message "Creating the configure_nginx.sh script..."
-CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
-cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
-#!/bin/bash
-
-REMOTE_PORT=$1
-SUBDOMAIN=$2
-DOMAIN="qurtnex.net.ng"
-
-# Check if REMOTE_PORT is provided
-if [[ -z "$REMOTE_PORT" ]]; then
-  echo "Remote port not specified"
-  exit 1
-fi
-
-# Configure Nginx for the unique subdomain
-NGINX_CONF="/etc/nginx/sites-available/$SUBDOMAIN"
-if [ -f $NGINX_CONF ]; then
-    rm $NGINX_CONF
-fi
-
-cat > $NGINX_CONF <<EOL
-server {
-    listen 80;
-    server_name $SUBDOMAIN.$DOMAIN;
-    location / {
-        proxy_pass http://localhost:$REMOTE_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name $SUBDOMAIN.$DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    location / {
-        proxy_pass http://localhost:$REMOTE_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOL
-
-if [ -L /etc/nginx/sites-enabled/$SUBDOMAIN ]; then
-    rm /etc/nginx/sites-enabled/$SUBDOMAIN
-fi
-ln -s /etc/nginx/sites-available/$SUBDOMAIN /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-EOF
-
-chmod +x /usr/local/bin/configure_nginx.sh
-
-# Create the auto_setup.sh script
+# Create the auto_setup.py script
 print_message "Creating the auto setup script..."
-AUTO_SETUP_SCRIPT="/usr/local/bin/auto_setup.sh"
+AUTO_SETUP_SCRIPT="/usr/local/bin/auto_setup.py"
 cat > $AUTO_SETUP_SCRIPT <<'EOF'
-#!/bin/bash
+#!/usr/bin/env python3
 
-# Debug information
-echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
+import os
+import subprocess
+import uuid
 
-REMOTE_PORT=$1
-HOST=$2
-LOCAL_PORT=$3
+# Function to print messages
+def print_message(message):
+    print(f"\n>>> {message}\n")
 
-echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
-echo "HOST: $HOST" | tee -a /home/tunnel/debug.log
-echo "LOCAL_PORT: $LOCAL_PORT" | tee -a /home/tunnel/debug.log
+def main():
+    # Read the SSH_ORIGINAL_COMMAND environment variable
+    original_command = os.environ.get("SSH_ORIGINAL_COMMAND", "")
+    
+    if not original_command:
+        print("This script should be run automatically on SSH login.")
+        return
 
-if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
-  echo "Failed to parse remote port, host, or local port from the command-line arguments." | tee -a /home/tunnel/debug.log
-  exit 1
-fi
+    # Extract remote port, host, and local port from the SSH command
+    try:
+        remote_port = original_command.split('-R ')[1].split(':')[0]
+        host = original_command.split('-R ')[1].split(':')[1]
+        local_port = original_command.split('-R ')[1].split(':')[2].split(' ')[0]
+    except IndexError:
+        print("Failed to parse remote port, host, or local port from the SSH command.")
+        return
 
-# Generate a unique subdomain
-SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
+    # Generate a unique subdomain
+    subdomain = uuid.uuid4().hex[:8]
 
-# Configure forwarding from the remote port to the local port and set up Nginx
-echo "Configuring port forwarding from $REMOTE_PORT to $LOCAL_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
-sudo /usr/local/bin/configure_nginx.sh $REMOTE_PORT $SUBDOMAIN
+    # Configure Nginx for the unique subdomain
+    nginx_conf = f"""
+server {{
+    listen 80;
+    server_name {subdomain}.qurtnex.net.ng;
+    location / {{
+        proxy_pass http://localhost:{remote_port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+}}
 
-LOCAL_URL="http://$HOST:$LOCAL_PORT"
-PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"
+server {{
+    listen 443 ssl;
+    server_name {subdomain}.qurtnex.net.ng;
 
-# Display the URLs in a tabular format
-printf "\n%-20s %-40s\n" "Local URL" "Public URL" | tee -a /home/tunnel/debug.log
-printf "%-20s %-40s\n" "---------" "----------" | tee -a /home/tunnel/debug.log
-printf "%-20s %-40s\n" "$LOCAL_URL" "$PUBLIC_URL" | tee -a /home/tunnel/debug.log
+    ssl_certificate /etc/letsencrypt/live/qurtnex.net.ng/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/qurtnex.net.ng/privkey.pem;
 
-echo "Setup completed successfully." | tee -a /home/tunnel/debug.log
+    location / {{
+        proxy_pass http://localhost:{remote_port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+}}
+"""
 
-# Keep the session open for debugging
-echo "Press [CTRL+C] to exit" | tee -a /home/tunnel/debug.log
-tail -f /dev/null
+    nginx_conf_path = f"/etc/nginx/sites-available/{subdomain}"
+    
+    with open(nginx_conf_path, 'w') as f:
+        f.write(nginx_conf)
+
+    # Enable the Nginx configuration
+    os.symlink(nginx_conf_path, f"/etc/nginx/sites-enabled/{subdomain}")
+    subprocess.run(["nginx", "-t"])
+    subprocess.run(["systemctl", "reload", "nginx"])
+
+    # Display the URLs in a tabular format
+    local_url = f"http://{host}:{local_port}"
+    public_url = f"https://{subdomain}.qurtnex.net.ng"
+    
+    print_message("Local URL            Public URL")
+    print_message("-------------------  ------------------------")
+    print_message(f"{local_url}  {public_url}")
+    print_message("Setup completed successfully.")
+    print_message("Press [CTRL+C] to exit")
+    
+    # Keep the session open for debugging
+    subprocess.run(["tail", "-f", "/dev/null"])
+
+if __name__ == "__main__":
+    main()
 EOF
 
-chmod +x /usr/local/bin/auto_setup.sh
+chmod +x /usr/local/bin/auto_setup.py
 
 # Create a sudoers file for the tunnel user
 print_message "Creating sudoers file for tunnel user..."
 SUDOERS_FILE="/etc/sudoers.d/tunnel"
 cat > $SUDOERS_FILE <<EOF
-tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
+tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/auto_setup.py
 EOF
 
-# Add the auto_setup.sh script execution to the tunnel user's .bashrc
+# Add the auto_setup.py script execution to the tunnel user's .bashrc
 print_message "Adding auto setup script execution to the tunnel user's .bashrc..."
 BASHRC_FILE="/home/$TUNNEL_USER/.bashrc"
-if ! grep -q "/usr/local/bin/auto_setup.sh" "$BASHRC_FILE"; then
-  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.sh; fi' >> "$BASHRC_FILE"
+if ! grep -q "/usr/local/bin/auto_setup.py" "$BASHRC_FILE"; then
+  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.py; fi' >> "$BASHRC_FILE"
 fi
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
-echo "ssh -t -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN \"/usr/local/bin/auto_setup.sh <remote_port> <host> <local_port>\""
+echo "ssh -R <remote_port>:localhost:<local_port> tunnel@$DOMAIN"

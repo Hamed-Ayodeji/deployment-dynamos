@@ -123,13 +123,13 @@ CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
 cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
 #!/bin/bash
 
-LOCAL_PORT=$1
+REMOTE_PORT=$1
 SUBDOMAIN=$2
 DOMAIN="qurtnex.net.ng"
 
-# Check if LOCAL_PORT is provided
-if [[ -z "$LOCAL_PORT" ]]; then
-  echo "Local port not specified"
+# Check if REMOTE_PORT is provided
+if [[ -z "$REMOTE_PORT" ]]; then
+  echo "Remote port not specified"
   exit 1
 fi
 
@@ -144,7 +144,7 @@ server {
     listen 80;
     server_name $SUBDOMAIN.$DOMAIN;
     location / {
-        proxy_pass http://localhost:$LOCAL_PORT;
+        proxy_pass http://localhost:$REMOTE_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -160,7 +160,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     location / {
-        proxy_pass http://localhost:$LOCAL_PORT;
+        proxy_pass http://localhost:$REMOTE_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -205,7 +205,7 @@ SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
 
 # Configure forwarding from the remote port to the local port and set up Nginx
 echo "Configuring port forwarding from $REMOTE_PORT to $LOCAL_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
-sudo /usr/local/bin/configure_nginx.sh $LOCAL_PORT $SUBDOMAIN
+sudo /usr/local/bin/configure_nginx.sh $REMOTE_PORT $SUBDOMAIN
 
 LOCAL_URL="http://$HOST:$LOCAL_PORT"
 PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"

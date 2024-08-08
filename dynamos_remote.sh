@@ -60,6 +60,7 @@ Match User $TUNNEL_USER
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
     ForceCommand /usr/local/bin/auto_setup.sh
+    PermitUserEnvironment yes
 EOL
 
 # Configure PAM for SSH to allow passwordless tunnel user login
@@ -188,12 +189,13 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
 
-# Extract the SSH reverse tunnel parameters
+# Extract the SSH original command
 if [[ -z "$SSH_ORIGINAL_COMMAND" ]]; then
     echo "No SSH_ORIGINAL_COMMAND found" | tee -a /home/tunnel/debug.log
     exit 1
 fi
 
+# Extract the reverse port forwarding details from SSH_ORIGINAL_COMMAND
 REMOTE_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=-R )\d+(?=:)')
 HOST=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=:)\S+(?=:)')
 LOCAL_PORT=$(echo $SSH_ORIGINAL_COMMAND | grep -oP '(?<=:)\d+$')

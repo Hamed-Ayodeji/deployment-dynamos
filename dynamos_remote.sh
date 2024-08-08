@@ -72,6 +72,9 @@ systemctl restart sshd
 # Configure Nginx for wildcard domains
 print_message "Configuring Nginx..."
 NGINX_CONF="/etc/nginx/sites-available/reverse-proxy"
+if [ -f $NGINX_CONF ]; then
+    rm $NGINX_CONF
+fi
 cat > $NGINX_CONF <<EOL
 server {
     listen 80;
@@ -96,6 +99,9 @@ server {
 }
 EOL
 
+if [ -L /etc/nginx/sites-enabled/reverse-proxy ]; then
+    rm /etc/nginx/sites-enabled/reverse-proxy
+fi
 ln -s /etc/nginx/sites-available/reverse-proxy /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 
@@ -110,6 +116,54 @@ else
   print_message "Follow the Certbot instructions to add the DNS TXT record."
   print_message "After adding the record and it has propagated, press Enter to continue."
 fi
+
+# Create the configure_nginx.sh script
+print_message "Creating the configure_nginx.sh script..."
+CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
+cat > $CONFIGURE_NGINX_SCRIPT <<'EOL'
+#!/bin/bash
+
+LOCAL_PORT=$1
+SUBDOMAIN=$2
+DOMAIN="qurtnex.net.ng"
+
+# Configure Nginx for the unique subdomain
+NGINX_CONF="/etc/nginx/sites-available/$SUBDOMAIN"
+if [ -f $NGINX_CONF ]; then
+    rm $NGINX_CONF
+fi
+cat > $NGINX_CONF <<EOL
+server {
+    listen 80;
+    server_name $SUBDOMAIN.$DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name $SUBDOMAIN.$DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:$LOCAL_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOL
+
+if [ -L /etc/nginx/sites-enabled/$SUBDOMAIN ]; then
+    rm /etc/nginx/sites-enabled/$SUBDOMAIN
+fi
+ln -s /etc/nginx/sites-available/$SUBDOMAIN /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+EOL
+
+chmod +x /usr/local/bin/configure_nginx.sh
 
 # Create the auto_setup.sh script
 print_message "Creating the auto setup script..."
@@ -150,48 +204,6 @@ fi
 EOL
 
 chmod +x /usr/local/bin/auto_setup.sh
-
-# Create the configure_nginx.sh script
-print_message "Creating the configure_nginx.sh script..."
-CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
-cat > $CONFIGURE_NGINX_SCRIPT <<'EOL'
-#!/bin/bash
-
-LOCAL_PORT=$1
-SUBDOMAIN=$2
-DOMAIN="qurtnex.net.ng"
-
-# Configure Nginx for the unique subdomain
-NGINX_CONF="/etc/nginx/sites-available/$SUBDOMAIN"
-cat > $NGINX_CONF <<EOL
-server {
-    listen 80;
-    server_name $SUBDOMAIN.$DOMAIN;
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name $SUBDOMAIN.$DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    location / {
-        proxy_pass http://localhost:$LOCAL_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOL
-
-ln -s /etc/nginx/sites-available/$SUBDOMAIN /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-EOL
-
-chmod +x /usr/local/bin/configure_nginx.sh
 
 # Create a sudoers file for the tunnel user
 print_message "Creating sudoers file for tunnel user..."

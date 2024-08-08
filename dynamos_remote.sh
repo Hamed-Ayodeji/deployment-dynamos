@@ -57,9 +57,10 @@ cat >> /etc/ssh/sshd_config <<EOL
 Match User $TUNNEL_USER
     PermitEmptyPasswords yes
     PasswordAuthentication yes
+    ForceCommand /usr/local/bin/auto_setup.sh
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
-    ForceCommand /usr/local/bin/check_reverse_tunnel.sh
+    GatewayPorts yes
 EOL
 
 # Configure PAM for SSH to allow passwordless tunnel user login
@@ -188,33 +189,30 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
 
-REMOTE_PORT=$1
-HOST=$2
-LOCAL_PORT=$3
+# Prompt the user for the remote port
+read -p "Enter the remote port to use: " REMOTE_PORT
 
-echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
-echo "HOST: $HOST" | tee -a /home/tunnel/debug.log
-echo "LOCAL_PORT: $LOCAL_PORT" | tee -a /home/tunnel/debug.log
-
-if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
-  echo "Failed to parse remote port, host, or local port from the command-line arguments." | tee -a /home/tunnel/debug.log
+# Ensure the remote port is provided
+if [[ -z "$REMOTE_PORT" ]]; then
+  echo "Remote port not specified." | tee -a /home/tunnel/debug.log
   exit 1
 fi
+
+echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
 
 # Generate a unique subdomain
 SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
 
-# Configure forwarding from the remote port to the local port and set up Nginx
-echo "Configuring port forwarding from $REMOTE_PORT to $LOCAL_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
+# Configure forwarding from the remote port and set up Nginx
+echo "Configuring Nginx for port $REMOTE_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
 sudo /usr/local/bin/configure_nginx.sh $REMOTE_PORT $SUBDOMAIN
 
-LOCAL_URL="http://$HOST:$LOCAL_PORT"
 PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"
 
-# Display the URLs in a tabular format
-printf "\n%-20s %-40s\n" "Local URL" "Public URL" | tee -a /home/tunnel/debug.log
-printf "%-20s %-40s\n" "---------" "----------" | tee -a /home/tunnel/debug.log
-printf "%-20s %-40s\n" "$LOCAL_URL" "$PUBLIC_URL" | tee -a /home/tunnel/debug.log
+# Display the public URL
+printf "\n%-20s %-40s\n" "Public URL" | tee -a /home/tunnel/debug.log
+printf "%-20s %-40s\n" "----------" | tee -a /home/tunnel/debug.log
+printf "%-20s %-40s\n" "$PUBLIC_URL" | tee -a /home/tunnel/debug.log
 
 echo "Setup completed successfully." | tee -a /home/tunnel/debug.log
 
@@ -225,31 +223,6 @@ EOF
 
 chmod +x /usr/local/bin/auto_setup.sh
 
-# Create the check_reverse_tunnel.sh script
-print_message "Creating the check_reverse_tunnel.sh script..."
-CHECK_REVERSE_TUNNEL_SCRIPT="/usr/local/bin/check_reverse_tunnel.sh"
-cat > $CHECK_REVERSE_TUNNEL_SCRIPT <<'EOF'
-#!/bin/bash
-
-# Log the SSH_ORIGINAL_COMMAND for debugging
-echo "SSH_ORIGINAL_COMMAND: $SSH_ORIGINAL_COMMAND" >> /home/tunnel/debug.log
-
-# Check if the SSH_ORIGINAL_COMMAND contains a reverse tunnel request (-R)
-if [[ "$SSH_ORIGINAL_COMMAND" =~ -R[[:space:]]([0-9]+):([^:]+):([0-9]+) ]]; then
-  REMOTE_PORT="${BASH_REMATCH[1]}"
-  HOST="${BASH_REMATCH[2]}"
-  LOCAL_PORT="${BASH_REMATCH[3]}"
-
-  echo "Detected reverse tunnel request. Executing auto_setup.sh with REMOTE_PORT=$REMOTE_PORT, HOST=$HOST, LOCAL_PORT=$LOCAL_PORT" >> /home/tunnel/debug.log
-  exec /usr/local/bin/auto_setup.sh "$REMOTE_PORT" "$HOST" "$LOCAL_PORT"
-else
-  echo "No reverse tunnel detected. Regular SSH session." >> /home/tunnel/debug.log
-  exec "$SHELL"
-fi
-EOF
-
-chmod +x /usr/local/bin/check_reverse_tunnel.sh
-
 # Create a sudoers file for the tunnel user
 print_message "Creating sudoers file for tunnel user..."
 SUDOERS_FILE="/etc/sudoers.d/tunnel"
@@ -258,4 +231,4 @@ tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
 EOF
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
-echo "ssh -R 8080:localhost:80 tunnel@$DOMAIN"
+echo "ssh -R <remote_port>:localhost:<local_port> tunnel@$DOMAIN"

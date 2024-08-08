@@ -28,21 +28,10 @@ is_cert_valid() {
   return 1
 }
 
-# Ensure the sudo group exists and has elevated privileges
-print_message "Ensuring the sudo group exists and has elevated privileges..."
-if ! getent group sudo > /dev/null; then
-    groupadd sudo
-fi
-
-if ! grep -q "^%sudo" /etc/sudoers; then
-    echo "%sudo   ALL=(ALL:ALL) ALL" >> /etc/sudoers
-fi
-
 # Create the tunnel user without a password
 print_message "Creating the tunnel user without a password..."
 if ! id -u $TUNNEL_USER > /dev/null 2>&1; then
     adduser --disabled-password --gecos "" $TUNNEL_USER
-    usermod -aG sudo $TUNNEL_USER
     passwd -d $TUNNEL_USER
 else
     print_message "User $TUNNEL_USER already exists."
@@ -50,7 +39,7 @@ fi
 
 # Update and install required packages
 print_message "Updating package list and installing required packages..."
-apt update && apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime iptables-persistent
+apt update && apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
 
 # Configure SSH for reverse forwarding and passwordless tunnel user access
 print_message "Configuring SSH..."
@@ -122,44 +111,101 @@ else
   print_message "After adding the record and it has propagated, press Enter to continue."
 fi
 
-# Create the subdomain assignment script
-print_message "Creating subdomain assignment script..."
-SUBDOMAIN_SCRIPT="/usr/local/bin/assign_subdomain.sh"
-cat > $SUBDOMAIN_SCRIPT <<'EOL'
+# Create the auto_setup.sh script
+print_message "Creating the auto setup script..."
+AUTO_SETUP_SCRIPT="/usr/local/bin/auto_setup.sh"
+cat > $AUTO_SETUP_SCRIPT <<'EOL'
 #!/bin/bash
 
-# Variables
+# Extract the remote port, host, and local port from the SSH_ORIGINAL_COMMAND
+if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then
+  REMOTE_PORT=$(echo $SSH_ORIGINAL_COMMAND | sed -n 's/.*-R \([0-9]*\):.*/\1/p')
+  HOST=$(echo $SSH_ORIGINAL_COMMAND | sed -n 's/.*-R [0-9]*:\([^:]*\):.*/\1/p')
+  LOCAL_PORT=$(echo $SSH_ORIGINAL_COMMAND | sed -n 's/.*-R [0-9]*:[^:]*:\([0-9]*\).*/\1/p')
+
+  if [[ -z $REMOTE_PORT || -z $HOST || -z $LOCAL_PORT ]]; then
+    echo "Failed to parse remote port, host, or local port from the SSH command."
+    exit 1
+  fi
+
+  # Generate a unique subdomain
+  SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
+
+  # Configure forwarding from the remote port to the local port and set up Nginx
+  echo "Configuring port forwarding from $REMOTE_PORT to $LOCAL_PORT with subdomain $SUBDOMAIN..."
+  sudo /usr/local/bin/configure_nginx.sh $LOCAL_PORT $SUBDOMAIN
+
+  LOCAL_URL="http://$HOST:$LOCAL_PORT"
+  PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"
+
+  # Display the URLs in a tabular format
+  printf "\n%-20s %-40s\n" "Local URL" "Public URL"
+  printf "%-20s %-40s\n" "---------" "----------"
+  printf "%-20s %-40s\n" "$LOCAL_URL" "$PUBLIC_URL"
+
+  echo "Setup completed successfully."
+else
+  echo "This script should be run automatically on SSH login."
+fi
+EOL
+
+chmod +x /usr/local/bin/auto_setup.sh
+
+# Create the configure_nginx.sh script
+print_message "Creating the configure_nginx.sh script..."
+CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
+cat > $CONFIGURE_NGINX_SCRIPT <<'EOL'
+#!/bin/bash
+
+LOCAL_PORT=$1
+SUBDOMAIN=$2
 DOMAIN="qurtnex.net.ng"
 
-# Generate a unique subdomain
-SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
-PORT=$1
+# Configure Nginx for the unique subdomain
+NGINX_CONF="/etc/nginx/sites-available/$SUBDOMAIN"
+cat > $NGINX_CONF <<EOL
+server {
+    listen 80;
+    server_name $SUBDOMAIN.$DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
 
-# Log the subdomain and port mapping (for debugging purposes)
-echo "$SUBDOMAIN: localhost:$PORT" >> /var/log/subdomains.log
+server {
+    listen 443 ssl;
+    server_name $SUBDOMAIN.$DOMAIN;
 
-# Output the subdomain to the user
-echo "Your application is available at https://$SUBDOMAIN.$DOMAIN"
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:$LOCAL_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
 EOL
 
-chmod +x /usr/local/bin/assign_subdomain.sh
-
-# Create systemd service for subdomain assignment
-print_message "Creating systemd service for subdomain assignment..."
-SYSTEMD_SERVICE="/etc/systemd/system/assign-subdomain.service"
-cat > $SYSTEMD_SERVICE <<EOL
-[Unit]
-Description=Assign Subdomain for SSH Reverse Forwarding
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/assign_subdomain.sh %p
-
-[Install]
-WantedBy=multi-user.target
+ln -s /etc/nginx/sites-available/$SUBDOMAIN /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
 EOL
 
-systemctl enable assign-subdomain.service
+chmod +x /usr/local/bin/configure_nginx.sh
 
-print_message "Setup completed successfully. Test the setup by running the following command from your local machine:"
-echo "ssh -R <local_port>:localhost:<local_port> tunnel@$DOMAIN"
+# Create a sudoers file for the tunnel user
+print_message "Creating sudoers file for tunnel user..."
+SUDOERS_FILE="/etc/sudoers.d/tunnel"
+cat > $SUDOERS_FILE <<EOL
+tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
+EOL
+
+# Add the auto_setup.sh script execution to the tunnel user's .bashrc
+print_message "Adding auto setup script execution to the tunnel user's .bashrc..."
+BASHRC_FILE="/home/$TUNNEL_USER/.bashrc"
+if ! grep -q "/usr/local/bin/auto_setup.sh" "$BASHRC_FILE"; then
+  echo 'if [[ -n "$SSH_ORIGINAL_COMMAND" ]]; then /usr/local/bin/auto_setup.sh; fi' >> "$BASHRC_FILE"
+fi
+
+print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
+echo "ssh -R <remote_port>:<host>:<local_port> tunnel@$DOMAIN"

@@ -95,7 +95,7 @@ cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
 
 REMOTE_PORT=8080
 SUBDOMAIN=$1
-DOMAIN="qurtnex.net.ng"
+DOMAIN="thequrtbuck.com.ng"
 
 # Check if SUBDOMAIN is provided
 if [[ -z "$SUBDOMAIN" ]]; then
@@ -171,7 +171,7 @@ SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
 # Display the public URL
 printf "\n%-20s %-40s\n" "Public URL" | tee -a /home/tunnel/debug.log
 printf "%-20s %-40s\n" "----------" | tee -a /home/tunnel/debug.log
-printf "%-20s %-40s\n" "https://$SUBDOMAIN.qurtnex.net.ng" | tee -a /home/tunnel/debug.log
+printf "%-20s %-40s\n" "https://$SUBDOMAIN.thequrtbuck.com.ng" | tee -a /home/tunnel/debug.log
 
 echo "Setup completed successfully." | tee -a /home/tunnel/debug.log
 

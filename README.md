@@ -53,7 +53,7 @@ This project aims to develop an alternative tunneling service similar to ngrok a
    The provided setup script will configure the server, including SSH, Nginx, and SSL certificates.
 
    ```bash
-   sudo ./setup.sh
+   sudo ./dynamos_remote.sh
    ```
 
    Follow the on-screen instructions to complete the setup, including adding a DNS TXT record for SSL verification.

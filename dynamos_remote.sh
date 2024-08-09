@@ -14,18 +14,18 @@ TUNNEL_USER="tunnel"
 
 # Function to print messages
 print_message() {
-  echo -e "\n>>> $1\n"
+    echo -e "\n>>> $1\n"
 }
 
 # Function to check if the SSL certificate is valid
 is_cert_valid() {
-  if [ -d "$CERT_DIR" ]; then
-    CERT_FILE="$CERT_DIR/fullchain.pem"
-    if openssl x509 -checkend 86400 -noout -in "$CERT_FILE" > /dev/null; then
-      return 0
+    if [ -d "$CERT_DIR" ]; then
+        CERT_FILE="$CERT_DIR/fullchain.pem"
+        if openssl x509 -checkend 86400 -noout -in "$CERT_FILE" > /dev/null; then
+            return 0
+        fi
     fi
-  fi
-  return 1
+    return 1
 }
 
 # Create the tunnel user without a password
@@ -49,6 +49,7 @@ sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_co
 sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/#ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/#UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
+sed -i 's/#AllowTcpForwarding.*/AllowTcpForwarding yes/' /etc/ssh/sshd_config
 
 # Add configuration for tunnel user
 cat >> /etc/ssh/sshd_config <<EOL
@@ -61,6 +62,7 @@ Match User $TUNNEL_USER
     PubkeyAuthentication no
     ChallengeResponseAuthentication no
     GatewayPorts yes
+    AllowTcpForwarding yes
 EOL
 
 # Configure PAM for SSH to allow passwordless tunnel user login
@@ -109,14 +111,14 @@ nginx -t && systemctl reload nginx
 
 # Check if SSL certificate exists and is valid
 if is_cert_valid; then
-  print_message "SSL certificate already exists and is valid."
+    print_message "SSL certificate already exists and is valid."
 else
-  # Obtain wildcard SSL certificate with Certbot
-  print_message "Obtaining SSL certificate with Certbot..."
-  print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
-  certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
-  print_message "Follow the Certbot instructions to add the DNS TXT record."
-  print_message "After adding the record and it has propagated, press Enter to continue."
+    # Obtain wildcard SSL certificate with Certbot
+    print_message "Obtaining SSL certificate with Certbot..."
+    print_message "IMPORTANT: You will need to manually add a DNS TXT record for verification."
+    certbot certonly --manual --preferred-challenges dns -d "*.$DOMAIN" --agree-tos --no-bootstrap --manual-public-ip-logging-ok --email $EMAIL
+    print_message "Follow the Certbot instructions to add the DNS TXT record."
+    print_message "After adding the record and it has propagated, press Enter to continue."
 fi
 
 # Create the configure_nginx.sh script
@@ -131,8 +133,8 @@ DOMAIN="qurtnex.net.ng"
 
 # Check if REMOTE_PORT is provided
 if [[ -z "$REMOTE_PORT" ]]; then
-  echo "Remote port not specified"
-  exit 1
+    echo "Remote port not specified"
+    exit 1
 fi
 
 # Configure Nginx for the unique subdomain
@@ -194,8 +196,8 @@ read -p "Enter the remote port to use: " REMOTE_PORT
 
 # Ensure the remote port is provided
 if [[ -z "$REMOTE_PORT" ]]; then
-  echo "Remote port not specified." | tee -a /home/tunnel/debug.log
-  exit 1
+    echo "Remote port not specified." | tee -a /home/tunnel/debug.log
+    exit 1
 fi
 
 echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log

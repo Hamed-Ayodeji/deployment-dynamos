@@ -11,7 +11,7 @@ DOMAIN="qurtnex.net.ng"
 EMAIL="qurtana93@outlook.com"
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 TUNNEL_USER="tunnel"
-REMOTE_PORT=8080  # Set the remote port permanently to 8080
+REMOTE_PORT=8080
 
 # Function to print messages
 print_message() {
@@ -52,7 +52,7 @@ sed -i 's/#ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/
 sed -i 's/#UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
 sed -i 's/#AllowTcpForwarding.*/AllowTcpForwarding yes/' /etc/ssh/sshd_config
 
-# Add configuration for tunnel user
+# Add configuration for tunnel user in SSHD config
 cat >> /etc/ssh/sshd_config <<EOL
 
 # Allow passwordless login for tunnel user
@@ -72,6 +72,7 @@ if ! grep -q "auth sufficient pam_permit.so" /etc/pam.d/sshd; then
     echo "auth sufficient pam_permit.so" >> /etc/pam.d/sshd
 fi
 
+# Restart SSH service to apply changes
 systemctl restart ssh
 
 # Check if SSL certificate exists and is valid
@@ -92,7 +93,7 @@ CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
 cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
 #!/bin/bash
 
-REMOTE_PORT=8080  # Set the remote port permanently to 8080
+REMOTE_PORT=8080
 SUBDOMAIN=$1
 DOMAIN="qurtnex.net.ng"
 

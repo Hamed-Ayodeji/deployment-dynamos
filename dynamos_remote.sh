@@ -11,6 +11,7 @@ DOMAIN="qurtnex.net.ng"
 EMAIL="qurtana93@outlook.com"
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 TUNNEL_USER="tunnel"
+REMOTE_PORT=8080  # Set the remote port permanently to 8080
 
 # Function to print messages
 print_message() {
@@ -73,42 +74,6 @@ fi
 
 systemctl restart ssh
 
-# Configure Nginx for wildcard domains
-print_message "Configuring Nginx..."
-NGINX_CONF="/etc/nginx/sites-available/reverse-proxy"
-if [ -f $NGINX_CONF ]; then
-    rm $NGINX_CONF
-fi
-cat > $NGINX_CONF <<EOL
-server {
-    listen 80;
-    server_name *.$DOMAIN;
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name *.$DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    location / {
-        proxy_pass http://localhost:\$http_x_forwarded_port;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOL
-
-if [ -L /etc/nginx/sites-enabled/reverse-proxy ]; then
-    rm /etc/nginx/sites-enabled/reverse-proxy
-fi
-ln -s /etc/nginx/sites-available/reverse-proxy /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-
 # Check if SSL certificate exists and is valid
 if is_cert_valid; then
     print_message "SSL certificate already exists and is valid."
@@ -127,13 +92,13 @@ CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
 cat > $CONFIGURE_NGINX_SCRIPT <<'EOF'
 #!/bin/bash
 
-REMOTE_PORT=$1
-SUBDOMAIN=$2
+REMOTE_PORT=8080  # Set the remote port permanently to 8080
+SUBDOMAIN=$1
 DOMAIN="qurtnex.net.ng"
 
-# Check if REMOTE_PORT is provided
-if [[ -z "$REMOTE_PORT" ]]; then
-    echo "Remote port not specified"
+# Check if SUBDOMAIN is provided
+if [[ -z "$SUBDOMAIN" ]]; then
+    echo "Subdomain not specified"
     exit 1
 fi
 
@@ -191,23 +156,15 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 # Debug information
 exec > >(tee -a /home/tunnel/debug.log) 2>&1
 
-# Prompt the user for the remote port
-read -p "Enter the remote port to use: " REMOTE_PORT
-
-# Ensure the remote port is provided
-if [[ -z "$REMOTE_PORT" ]]; then
-    echo "Remote port not specified." | tee -a /home/tunnel/debug.log
-    exit 1
-fi
-
-echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
+# Set the remote port permanently to 8080
+REMOTE_PORT=8080
 
 # Generate a unique subdomain
 SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
 
 # Configure forwarding from the remote port and set up Nginx
 {
-    sudo /usr/local/bin/configure_nginx.sh $REMOTE_PORT $SUBDOMAIN
+    sudo /usr/local/bin/configure_nginx.sh $SUBDOMAIN
 } &> /dev/null  # Suppresses the output of the configuration steps
 
 # Display the public URL
@@ -232,4 +189,4 @@ tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
 EOF
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
-echo "ssh -R <remote_port>:localhost:<local_port> tunnel@$DOMAIN"
+echo "ssh -R 8080:localhost:<local_port> tunnel@$DOMAIN"

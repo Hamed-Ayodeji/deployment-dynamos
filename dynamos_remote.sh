@@ -7,7 +7,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 # Variables
-DOMAIN="qurtnex.net.ng"
+DOMAIN="thequrtbuck.com.ng"
 EMAIL="qurtana93@outlook.com"
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 TUNNEL_USER="tunnel"
@@ -41,15 +41,6 @@ fi
 # Update and install required packages
 print_message "Updating package list and installing required packages..."
 apt update && apt install -y openssh-server nginx certbot python3-certbot-nginx uuid-runtime
-
-# Remove the default Nginx configuration
-print_message "Removing the default Nginx configuration..."
-if [ -f /etc/nginx/sites-enabled/default ]; then
-    rm /etc/nginx/sites-enabled/default
-fi
-if [ -f /etc/nginx/sites-available/default ]; then
-    rm /etc/nginx/sites-available/default
-fi
 
 # Configure SSH for reverse forwarding and passwordless tunnel user access
 print_message "Configuring SSH..."

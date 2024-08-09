@@ -87,6 +87,11 @@ else
     print_message "After adding the record and it has propagated, press Enter to continue."
 fi
 
+# Remove the default Nginx configuration
+print_message "Removing the default Nginx configuration..."
+rm -f /etc/nginx/sites-enabled/default
+rm -f /etc/nginx/sites-available/default
+
 # Create the configure_nginx.sh script
 print_message "Creating the configure_nginx.sh script..."
 CONFIGURE_NGINX_SCRIPT="/usr/local/bin/configure_nginx.sh"
@@ -188,6 +193,10 @@ SUDOERS_FILE="/etc/sudoers.d/tunnel"
 cat > $SUDOERS_FILE <<EOF
 tunnel ALL=(ALL) NOPASSWD: /usr/local/bin/configure_nginx.sh
 EOF
+
+# Restart Nginx to apply changes
+print_message "Restarting Nginx to apply changes..."
+systemctl restart nginx
 
 print_message "Setup completed successfully. To use the setup, run the following SSH command from your local machine:"
 echo "ssh -R 8080:localhost:<local_port> tunnel@$DOMAIN"

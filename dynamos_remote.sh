@@ -189,7 +189,7 @@ cat > $AUTO_SETUP_SCRIPT <<'EOF'
 #!/bin/bash
 
 # Debug information
-echo "Executing auto_setup.sh" | tee -a /home/tunnel/debug.log
+exec > >(tee -a /home/tunnel/debug.log) 2>&1
 
 # Prompt the user for the remote port
 read -p "Enter the remote port to use: " REMOTE_PORT
@@ -206,15 +206,14 @@ echo "REMOTE_PORT: $REMOTE_PORT" | tee -a /home/tunnel/debug.log
 SUBDOMAIN=$(uuidgen | cut -d'-' -f1)
 
 # Configure forwarding from the remote port and set up Nginx
-echo "Configuring Nginx for port $REMOTE_PORT with subdomain $SUBDOMAIN..." | tee -a /home/tunnel/debug.log
-sudo /usr/local/bin/configure_nginx.sh $REMOTE_PORT $SUBDOMAIN
-
-PUBLIC_URL="https://$SUBDOMAIN.qurtnex.net.ng"
+{
+    sudo /usr/local/bin/configure_nginx.sh $REMOTE_PORT $SUBDOMAIN
+} &> /dev/null  # Suppresses the output of the configuration steps
 
 # Display the public URL
 printf "\n%-20s %-40s\n" "Public URL" | tee -a /home/tunnel/debug.log
 printf "%-20s %-40s\n" "----------" | tee -a /home/tunnel/debug.log
-printf "%-20s %-40s\n" "$PUBLIC_URL" | tee -a /home/tunnel/debug.log
+printf "%-20s %-40s\n" "https://$SUBDOMAIN.qurtnex.net.ng" | tee -a /home/tunnel/debug.log
 
 echo "Setup completed successfully." | tee -a /home/tunnel/debug.log
 
